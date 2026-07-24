@@ -8,6 +8,7 @@ import EmployeeRoute from "./components/EmployeeRoute";
 import RoleHome from "./components/RoleHome";
 import DashboardPage from "./pages/Manager/DashboardPage";
 import EmployeesPage from "./pages/Manager/EmployeesPage";
+import EmployeeBranchesPage from "./pages/Manager/EmployeeBranchesPage";
 import SchedulePage from "./pages/Manager/SchedulePage";
 import ManagerUtilityPage from "./pages/Manager/ManagerUtilityPage";
 import InventoryPage from "./pages/Inventory/InventoryPage";
@@ -15,14 +16,19 @@ import ImportInventoryPage from "./pages/Inventory/ImportInventoryPage";
 import ProductsPage from "./pages/Inventory/InventoryHistoryPage";
 import ReportsPage from "./pages/Manager/ShiftsPage";
 import EmployeeHomePage from "./pages/Employee/EmployeeHomePage";
-import PosPage from "./pages/Employee/PosPage";
-import OrdersPage from "./pages/Employee/OrdersPage";
 import ShiftPage from "./pages/Employee/ShiftPage";
 import AttendancePage from "./pages/Employee/AttendancePage";
 import ShiftClosingPage from "./pages/Employee/ShiftClosingPage";
 import ExpensesPage from "./pages/Employee/ExpensesPage";
 import MySchedulePage from "./pages/Employee/MySchedulePage";
 import ProfilePage from "./pages/Employee/ProfilePage";
+import LeaveRequestPage from "./pages/Employee/LeaveRequestPage";
+import NotificationsPage from "./pages/Employee/NotificationsPage";
+import ShiftReportPage from "./pages/Employee/ShiftReportPage";
+import ShiftRegistrationPage from "./pages/Employee/ShiftRegistrationPage";
+import ManagerShiftRegistrationPage from "./pages/Manager/ShiftRegistrationPage";
+import ShiftRegistrationDetailPage from "./pages/Manager/ShiftRegistrationDetailPage";
+import ScheduleBuilderPage from "./pages/Manager/ScheduleBuilderPage";
 
 export default function App() {
   return <BrowserRouter><Routes>
@@ -34,7 +40,11 @@ export default function App() {
       <Route path="/manager" element={<ManagerLayout />}>
         <Route index element={<Navigate to="dashboard" replace />} />
         <Route path="dashboard" element={<DashboardPage />} />
-        <Route path="employees" element={<EmployeesPage />} />
+        <Route path="employees" element={<EmployeeBranchesPage />} />
+        <Route path="employees/branch/:branchId" element={<EmployeesPage />} />
+        <Route path="shift-registration" element={<ManagerShiftRegistrationPage />} />
+        <Route path="shift-registration/:periodId" element={<ShiftRegistrationDetailPage />} />
+        <Route path="schedules/builder/:periodId" element={<ScheduleBuilderPage />} />
         <Route path="schedules" element={<SchedulePage />} />
         <Route path="inventory" element={<InventoryPage />} />
         <Route path="imports" element={<ImportInventoryPage />} />
@@ -51,13 +61,17 @@ export default function App() {
       <Route path="/employee" element={<EmployeeLayout />}>
         <Route index element={<Navigate to="home" replace />} />
         <Route path="home" element={<EmployeeHomePage />} />
-        <Route path="pos" element={<PosPage />} />
-        <Route path="orders" element={<OrdersPage />} />
+        <Route path="pos" element={<Navigate to="/employee/home" replace />} />
+        <Route path="orders" element={<Navigate to="/employee/home" replace />} />
         <Route path="shift" element={<ShiftPage />} />
         <Route path="attendance" element={<AttendancePage />} />
         <Route path="shift-closing" element={<ShiftClosingPage />} />
+        <Route path="shift-report" element={<ShiftReportPage />} />
+        <Route path="shift-registration" element={<ShiftRegistrationPage />} />
         <Route path="expenses" element={<ExpensesPage />} />
         <Route path="schedule" element={<MySchedulePage />} />
+        <Route path="leave-request" element={<LeaveRequestPage />} />
+        <Route path="notifications" element={<NotificationsPage />} />
         <Route path="profile" element={<ProfilePage />} />
       </Route>
     </Route>

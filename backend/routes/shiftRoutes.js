@@ -1,13 +1,5 @@
-const express = require("express");
-
-const router = express.Router();
-
-router.get("/", (req, res) => {
-    res.json({
-        success: true,
-        message: "Danh sách ca làm",
-        data: []
-    });
-});
-
+const router = require("express").Router();
+const authenticate = require("../middleware/authMiddleware");
+const { getTodayShift } = require("../controllers/shiftController");
+router.get("/today", authenticate, getTodayShift);
 module.exports = router;

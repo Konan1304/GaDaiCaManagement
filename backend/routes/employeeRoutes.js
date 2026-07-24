@@ -1,13 +1,47 @@
-const express = require("express");
-
-const router = express.Router();
-
-router.get("/", (req, res) => {
-    res.json({
-        success: true,
-        message: "Danh sách nhân viên",
-        data: []
-    });
+const router=require("express").Router();
+const authenticate=require("../middleware/authMiddleware");
+const allowRoles=require("../middleware/roleMiddleware");
+const controller=require("../controllers/employeeController");
+const registration=require("../controllers/scheduleRegistrationController");
+const normalizeRegistrationTimes=(req,res,next)=>{for(const key of ["registrationOpenAt","registrationCloseAt"])if(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(String(req.body[key]||"")))req.body[key]+=":00";next()};
+router.use(authenticate,allowRoles("admin","manager"));
+router.get("/branches",controller.branches);
+router.post("/branches",controller.createBranch);
+router.get("/positions",controller.positions);
+router.get("/employee-branches",controller.employeeBranches);
+router.use(["/schedule-registration-periods","/schedule-builder","/shift-registration","/schedules"],registration.managerScope);
+router.get("/schedule-registration-periods",registration.periodsScoped);
+router.post("/schedule-registration-periods",normalizeRegistrationTimes,registration.validateCreatePeriod,registration.createPeriod);
+router.get("/schedule-registration-periods/:id",registration.periodDetail);
+router.put("/schedule-registration-periods/:id",normalizeRegistrationTimes,registration.updatePeriod);
+router.delete("/schedule-registration-periods/:id",registration.deletePeriod);
+router.patch("/schedule-registration-periods/:id/publish",registration.publish);
+router.patch("/schedule-registration-periods/:id/:action",(req,res,next)=>{
+  if(!["open","lock","cancel"].includes(req.params.action))return res.status(400).json({success:false,message:"Thao tác không hợp lệ"});
+  registration.transition(req,res,next);
 });
-
-module.exports = router;
+router.get("/schedule-builder/:periodId",registration.builderGet);
+router.put("/schedule-builder/:periodId",registration.builderSave);
+router.put("/schedule-builder/:periodId/draft",registration.builderSave);
+router.post("/schedule-builder/:periodId/publish",registration.publish);
+router.get("/shift-registration",registration.periodsScoped);
+router.post("/shift-registration",normalizeRegistrationTimes,registration.validateCreatePeriod,registration.createPeriod);
+router.get("/shift-registration/submissions",(req,res,next)=>{req.params.id=req.query.periodId;registration.periodDetail(req,res,next)});
+router.get("/shift-registration/:id",registration.periodDetail);
+router.put("/shift-registration/:id",normalizeRegistrationTimes,registration.updatePeriod);
+router.delete("/shift-registration/:id",registration.deletePeriod);
+router.post("/shift-registration/:id/open",(req,res,next)=>{req.params.action="open";registration.transition(req,res,next)});
+router.post("/shift-registration/:id/lock",(req,res,next)=>{req.params.action="lock";registration.transition(req,res,next)});
+router.post("/shift-registration/:id/publish",registration.publish);
+router.get("/schedules",registration.managerSchedules);
+router.post("/schedules/generate",(req,res,next)=>{req.params.periodId=req.body.periodId;registration.builderSave(req,res,next)});
+router.get("/employees",controller.list);
+router.post("/employees",controller.create);
+router.use("/employees/:id",controller.employeeScope);
+router.get("/employees/:id",controller.detail);
+router.put("/employees/:id",controller.update);
+router.delete("/employees/:id",controller.remove);
+router.patch("/employees/:id/account-status",controller.accountStatus);
+router.patch("/employees/:id/reset-password",controller.resetPassword);
+router.patch("/employees/:id/resign",controller.resign);
+module.exports=router;

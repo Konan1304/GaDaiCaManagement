@@ -1,12 +1,4 @@
-const express = require("express");
-
-const router = express.Router();
-
-router.post("/login", (req, res) => {
-    res.json({
-        success: true,
-        message: "API đăng nhập"
-    });
-});
-
+const router = require("express").Router();
+const { login } = require("../controllers/authController");
+router.post("/login", login);
 module.exports = router;

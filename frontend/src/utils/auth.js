@@ -1,8 +1,3 @@
-export const DEMO_USERS = [
-  { email: "admin@daiga.vn", password: "123456", role: "manager", name: "Quốc Anh", position: "Quản lý cửa hàng" },
-  { email: "nhanvien@daiga.vn", password: "123456", role: "employee", name: "Trần Thảo Linh", position: "Nhân viên thu ngân" },
-];
-
 export function getSession() {
   const token = localStorage.getItem("token");
   const role = localStorage.getItem("role");
@@ -11,11 +6,11 @@ export function getSession() {
   return { token, role, user, isAuthenticated: Boolean(token && user && role) };
 }
 
-export function createSession(account) {
-  const user = { email: account.email, role: account.role, name: account.name, position: account.position };
-  localStorage.setItem("token", `demo-${account.role}-${Date.now()}`);
+export function createSession(payload) {
+  const user = { id:payload.userId, name:payload.fullName, role:payload.role };
+  localStorage.setItem("token", payload.token);
   localStorage.setItem("user", JSON.stringify(user));
-  localStorage.setItem("role", account.role);
+  localStorage.setItem("role", payload.role);
   return user;
 }
 
@@ -26,5 +21,5 @@ export function clearSession() {
 }
 
 export function homeForRole(role) {
-  return role === "manager" ? "/manager/dashboard" : role === "employee" ? "/employee/home" : "/login";
+  return role === "admin" || role === "manager" ? "/manager/dashboard" : role === "employee" ? "/employee/home" : "/login";
 }

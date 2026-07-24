@@ -1,5 +1,34 @@
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
-import { FiCalendar, FiClipboard, FiClock, FiDollarSign, FiHome, FiLogOut, FiShoppingBag, FiUser, FiXCircle } from "react-icons/fi";
-import { clearSession, getSession } from "../utils/auth";
-const links=[["/employee/home","Trang chủ",FiHome],["/employee/pos","Bán hàng",FiShoppingBag],["/employee/orders","Đơn hàng",FiClipboard],["/employee/shift","Ca làm",FiClock],["/employee/shift-closing","Đóng ca",FiXCircle],["/employee/expenses","Chi phí",FiDollarSign],["/employee/schedule","Lịch làm",FiCalendar],["/employee/profile","Hồ sơ",FiUser]];
-export default function EmployeeLayout(){const navigate=useNavigate(),{user}=getSession();function logout(){clearSession();navigate("/login",{replace:true})}return <div className="employee-app"><aside className="employee-sidebar"><div className="brand"><span className="brand-mark">ĐG</span><div><strong>ĐẠI GÀ</strong><small>NHÂN VIÊN</small></div></div><div className="employee-user"><div className="avatar">TL</div><div><b>{user?.name||"Thảo Linh"}</b><small>{user?.position||"Thu ngân"}</small></div></div><nav>{links.map(([to,label,Icon])=><NavLink to={to} key={to}><Icon/><span>{label}</span></NavLink>)}</nav><button className="employee-logout" onClick={logout}><FiLogOut/><span>Đăng xuất</span></button></aside><header className="employee-mobile-header"><div className="brand"><span className="brand-mark">ĐG</span><strong>ĐẠI GÀ</strong></div><div className="avatar">TL</div></header><main className="employee-workspace"><Outlet/></main><nav className="employee-bottom-nav">{links.map(([to,label,Icon])=><NavLink to={to} key={to}><Icon/><span>{label}</span></NavLink>)}</nav></div>}
+import { useEffect, useState } from "react";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { FiBell, FiCalendar, FiChevronLeft, FiClock, FiHome, FiUser } from "react-icons/fi";
+import { profileApi } from "../api/services";
+import { clearSession } from "../utils/auth";
+import "../styles/employee-app.css";
+
+const nav=[
+  ["/employee/home","Trang chủ",FiHome],
+  ["/employee/schedule","Lịch làm",FiCalendar],
+  ["/employee/attendance","Chấm công",FiClock],
+  ["/employee/profile","Hồ sơ",FiUser],
+];
+const titles={schedule:"Lịch làm việc",attendance:"Chấm công",shift:"Ca làm",expenses:"Chi phí","shift-closing":"Đóng ca","shift-report":"Báo cáo ca","shift-registration":"Đăng ký ca","leave-request":"Xin nghỉ",notifications:"Thông báo",profile:"Hồ sơ"};
+
+export default function EmployeeLayout(){
+  const navigate=useNavigate(),location=useLocation();
+  const [profile,setProfile]=useState(null),[loading,setLoading]=useState(true);
+  const page=location.pathname.split("/").pop(),home=page==="home";
+  useEffect(()=>{profileApi.get().then(r=>setProfile(r.data)).catch(()=>{}).finally(()=>setLoading(false))},[]);
+  const initials=(profile?.fullName||"NV").split(/\s+/).slice(-2).map(x=>x[0]).join("").toUpperCase();
+  function logout(){clearSession();navigate("/login",{replace:true})}
+  return <div className="emp-app">
+    <header className={`emp-header ${home?"emp-header-home":""}`}>
+      {home?<><div className="emp-avatar">{profile?.avatarUrl?<img src={profile.avatarUrl} alt=""/>:initials}</div><div className="emp-greeting"><small>Xin chào</small><strong>{profile?.fullName|| (loading?"Đang tải...":"Nhân viên")}</strong><span>{[profile?.position,profile?.branchName].filter(Boolean).join(" · ")}</span></div></>:<>
+        <button className="emp-icon-button" onClick={()=>navigate(-1)} aria-label="Quay lại"><FiChevronLeft/></button>
+        <h1>{titles[page]||"Gà Đại Ca"}</h1><span className="emp-header-spacer"/>
+      </>}
+      <button className="emp-icon-button emp-bell" onClick={()=>navigate("/employee/notifications")} aria-label="Thông báo"><FiBell/></button>
+    </header>
+    <main className="emp-content"><Outlet context={{profile,loading,logout}}/></main>
+    <nav className="emp-bottom-nav">{nav.map(([to,label,Icon])=><NavLink key={to} to={to}><Icon/><span>{label}</span></NavLink>)}</nav>
+  </div>
+}

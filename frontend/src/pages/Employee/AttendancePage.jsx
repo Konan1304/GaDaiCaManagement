@@ -1,7 +1,18 @@
-import { useState } from "react";
-import { FiCheckCircle, FiClock, FiInfo, FiLogIn, FiLogOut } from "react-icons/fi";
-import { readStorage, writeStorage } from "../../data/employeeData";
-
-// Dữ liệu thật sau này sẽ được đồng bộ từ API của máy chấm công.
-// Trình duyệt không đọc và không xử lý dữ liệu vân tay trực tiếp.
-export default function AttendancePage(){const [attendance,setAttendance]=useState(()=>readStorage("employeeAttendance",{checkIn:null,checkOut:null})),[message,setMessage]=useState("");function check(type){const fixed=type==="checkIn"?"07:58":"12:03";const next={...attendance,[type]:fixed};setAttendance(next);writeStorage("employeeAttendance",next);setMessage(`${type==="checkIn"?"Chấm công vào":"Chấm công ra"} thành công lúc ${fixed}`)}const completed=attendance.checkIn&&attendance.checkOut;return <><div className="employee-page-title"><div><h1>Chấm công</h1><p>Mô phỏng dữ liệu được đồng bộ từ máy chấm công.</p></div><span className="attendance-date">22/07/2026</span></div>{message&&<div className="inline-message success"><FiCheckCircle/>{message}</div>}<section className="attendance-grid"><article className="card attendance-action"><span className="attendance-icon in"><FiLogIn/></span><small>CHẤM CÔNG VÀO</small><h2>{attendance.checkIn||"--:--"}</h2><p>Giờ bắt đầu ca: 08:00</p><button className="btn btn-primary touch-btn" disabled={Boolean(attendance.checkIn)} onClick={()=>check("checkIn")}>{attendance.checkIn?"Đã chấm công vào":"Chấm công vào"}</button></article><article className="card attendance-action"><span className="attendance-icon out"><FiLogOut/></span><small>CHẤM CÔNG RA</small><h2>{attendance.checkOut||"--:--"}</h2><p>Giờ kết thúc ca: 12:00</p><button className="btn btn-dark touch-btn" disabled={!attendance.checkIn||Boolean(attendance.checkOut)} onClick={()=>check("checkOut")}>{attendance.checkOut?"Đã chấm công ra":"Chấm công ra"}</button></article></section><section className="card attendance-summary"><div><FiClock/><span><small>Tổng thời gian làm</small><b>{completed?"4 giờ 05 phút":attendance.checkIn?"Đang tính...":"Chưa bắt đầu"}</b></span></div><div><FiCheckCircle/><span><small>Trạng thái</small><b className={attendance.checkIn?"positive":""}>{attendance.checkIn?"Đi đúng giờ":"Chưa chấm công"}</b></span></div></section><div className="api-note"><FiInfo/><p><b>Nguồn dữ liệu chấm công</b><span>Bản demo đang dùng dữ liệu mô phỏng. Khi kết nối thật, dữ liệu sẽ nhận từ API máy chấm công và được backend xác thực.</span></p></div></>}
+import { useEffect, useState } from "react";
+import { FiClock } from "react-icons/fi";
+import { employeeApi } from "../../api/services";
+import { shortDate, time } from "../../utils/employeeFormat";
+export default function AttendancePage(){
+  const [data,setData]=useState(null),[error,setError]=useState("");
+  useEffect(()=>{employeeApi.attendance().then(r=>setData(r.data)).catch(e=>setError(e.response?.data?.message||"Không tải được chấm công"))},[]);
+  const start=data?.schedule?.startTime,late=data?.checkIn&&start&&time(data.checkIn)>time(start);
+  const duration=data?.checkIn&&data?.checkOut?Math.max(0,(new Date(data.checkOut)-new Date(data.checkIn))/36e5):null;
+  return <div>{error&&<div className="emp-error">{error}</div>}
+    <section className="emp-card"><span className={`emp-badge ${data?.checkIn?"success":"warn"}`}>{data?.checkIn?(late?"Đi trễ":"Đúng giờ"):"Chưa chấm công"}</span><h2 style={{margin:"14px 0 5px"}}>{data?.schedule?.shiftName||"Hôm nay chưa có lịch"}</h2><p className="emp-muted">{start?`${time(start)} – ${time(data.schedule.endTime)}`:"Dữ liệu từ hệ thống chấm công"}</p>
+      <div className="emp-time-row"><div><small>Vào ca</small><strong>{time(data?.checkIn)}</strong></div><span className="emp-time-line"/><div><small>Ra ca</small><strong>{time(data?.checkOut)}</strong></div></div>
+      <p className="emp-muted" style={{marginTop:18}}>Tổng thời gian: {duration===null?"Chưa hoàn tất":`${duration.toFixed(1)} giờ`}</p>
+    </section>
+    <div className="emp-section-head"><h2>Lịch sử gần đây</h2></div><section className="emp-card">{data?.recent?.length?<div className="emp-list">{data.recent.map((x,i)=><div className="emp-list-item" key={`${x.attendanceTime}-${i}`}><FiClock/><div><b>{x.attendanceType==="check_in"?"Chấm công vào":"Chấm công ra"}</b><small>{shortDate(x.attendanceTime)} · {time(x.attendanceTime)} · {x.source}</small></div></div>)}</div>:<div className="emp-empty"><FiClock/><div>Chưa có dữ liệu chấm công</div></div>}</section>
+    {/* Dữ liệu thật được backend nhận từ API/máy chấm công; trình duyệt không trực tiếp đọc vân tay. */}
+  </div>
+}
