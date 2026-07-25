@@ -11,7 +11,7 @@ const nav=[
   ["/employee/attendance","Chấm công",FiClock],
   ["/employee/profile","Hồ sơ",FiUser],
 ];
-const titles={schedule:"Lịch làm việc",attendance:"Chấm công",shift:"Ca làm",expenses:"Chi phí","shift-closing":"Đóng ca","shift-report":"Báo cáo ca","shift-registration":"Đăng ký ca","leave-request":"Xin nghỉ",notifications:"Thông báo",profile:"Hồ sơ"};
+const titles={schedule:"Lịch làm việc",attendance:"Chấm công",shift:"Ca làm",payroll:"Lương của tôi",expenses:"Chi phí","shift-closing":"Đóng ca","shift-report":"Báo cáo ca","shift-registration":"Đăng ký ca","leave-request":"Xin nghỉ",notifications:"Thông báo",profile:"Hồ sơ"};
 
 export default function EmployeeLayout(){
   const navigate=useNavigate(),location=useLocation();

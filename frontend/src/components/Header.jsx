@@ -1,7 +1,7 @@
 import { FiBell, FiMenu, FiSearch } from "react-icons/fi";
 import { useLocation } from "react-router-dom";
 
-const titles = { dashboard:"Tổng quan", employees:"Nhân viên", schedules:"Lịch làm việc", inventory:"Kho hàng", imports:"Nhập hàng", exports:"Xuất hàng", products:"Sản phẩm", categories:"Danh mục", suppliers:"Nhà cung cấp", reports:"Báo cáo", notifications:"Thông báo", settings:"Cài đặt" };
+const titles = { dashboard:"Tổng quan", employees:"Nhân viên", schedules:"Lịch làm việc", inventory:"Kho hàng", imports:"Nhập hàng", exports:"Xuất hàng", products:"Sản phẩm", categories:"Danh mục", suppliers:"Nhà cung cấp", reports:"Báo cáo", payrolls:"Lương", notifications:"Thông báo", settings:"Cài đặt" };
 export default function Header({ onMenu, user }) {
   const key = useLocation().pathname.split("/").pop();
   const date = new Intl.DateTimeFormat("vi-VN", { weekday:"long", day:"2-digit", month:"long", year:"numeric" }).format(new Date());

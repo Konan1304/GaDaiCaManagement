@@ -15,7 +15,22 @@ export const productApi = {
   remove: (id) => axiosClient.delete(`/products/${id}`).then(r=>r.data),
 };
 export const dashboardApi = { get: () => axiosClient.get("/dashboard").then(r=>r.data) };
+export const payrollApi = {
+  list: params => axiosClient.get("/manager/payrolls",{params}).then(r=>r.data),
+  detail: (employeeId,month) => axiosClient.get(`/manager/payrolls/${employeeId}`,{params:{month}}).then(r=>r.data),
+  calculate: params => axiosClient.post("/manager/payrolls/calculate",null,{params}).then(r=>r.data),
+  save: (employeeId,month,payload) => axiosClient.put(`/manager/payrolls/${employeeId}`,payload,{params:{month}}).then(r=>r.data),
+  transition: (employeeId,month,action) => axiosClient.patch(`/manager/payrolls/${employeeId}/${action}`,null,{params:{month}}).then(r=>r.data),
+  mine: month => axiosClient.get("/employee/payroll",{params:{month}}).then(r=>r.data),
+};
 export const managerScheduleApi = { list: params => axiosClient.get("/manager/schedules",{params}).then(r=>r.data) };
+export const managerAttendanceApi = {
+  list: params => axiosClient.get("/manager/attendance",{params}).then(r=>r.data),
+  options: () => axiosClient.get("/manager/attendance/options").then(r=>r.data),
+  detail: id => axiosClient.get(`/manager/attendance/${id}`).then(r=>r.data),
+  update: (id,payload) => axiosClient.put(`/manager/attendance/${id}`,payload).then(r=>r.data),
+  manual: payload => axiosClient.post("/manager/attendance/manual",payload).then(r=>r.data),
+};
 export const managerEmployeeApi = {
   list: (params) => axiosClient.get("/manager/employees", { params }).then(r=>r.data),
   get: (id) => axiosClient.get(`/manager/employees/${id}`).then(r=>r.data),
@@ -27,12 +42,17 @@ export const managerEmployeeApi = {
   branches: () => axiosClient.get("/manager/branches").then(r=>r.data),
   positions: () => axiosClient.get("/manager/positions").then(r=>r.data),
   createBranch: payload => axiosClient.post("/manager/branches",payload).then(r=>r.data),
+  updateBranchName: (id,branchName) => axiosClient.patch(`/manager/branches/${id}/name`,{branchName}).then(r=>r.data),
   employeeBranches: params => axiosClient.get("/manager/employee-branches",{params}).then(r=>r.data),
   remove: id => axiosClient.delete(`/manager/employees/${id}`).then(r=>r.data),
 };
 export const employeeApi = {
   schedules: (from, to) => axiosClient.get("/employee/schedules", { params:{ from, to } }).then(r=>r.data),
   attendance: () => axiosClient.get("/employee/attendance").then(r=>r.data),
+  attendanceToday: () => axiosClient.get("/employee/attendance/today").then(r=>r.data),
+  attendanceCheckIn: payload => axiosClient.post("/employee/attendance/check-in",payload).then(r=>r.data),
+  attendanceCheckOut: payload => axiosClient.post("/employee/attendance/check-out",payload).then(r=>r.data),
+  attendanceHistory: month => axiosClient.get("/employee/attendance/history",{params:{month}}).then(r=>r.data),
   shiftSession: () => axiosClient.get("/employee/shift-session").then(r=>r.data),
   openShift: (payload) => axiosClient.post("/employee/shift-session/open", payload).then(r=>r.data),
   closeShift: (payload) => axiosClient.post("/employee/shift-session/close", payload).then(r=>r.data),

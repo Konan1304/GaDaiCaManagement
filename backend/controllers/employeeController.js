@@ -176,6 +176,23 @@ async function createBranch(req,res,next){try{
   res.status(201).json({success:true,message:"Thêm chi nhánh thành công",data:result.recordset[0]});
 }catch(error){if(error.number===50001)return fail(res,409,"Mã chi nhánh đã tồn tại","branchCode");next(error)}}
 
+async function updateBranchName(req,res,next){try{
+  const branchName=clean(req.body.branchName),branchId=Number(req.params.id);
+  if(!Number.isInteger(branchId)||branchId<=0)return fail(res,400,"Chi nhánh không hợp lệ","branchId");
+  if(!branchName)return fail(res,400,"Tên chi nhánh là bắt buộc","branchName");
+  if(branchName.length>150)return fail(res,400,"Tên chi nhánh không được quá 150 ký tự","branchName");
+  const request=(await getPool()).request().input("id",sql.Int,branchId).input("name",sql.NVarChar(150),branchName);
+  let scope="";
+  if(req.user.role!=="admin"){
+    request.input("userId",sql.Int,req.user.userId);
+    scope=" AND EXISTS(SELECT 1 FROM employees e WHERE e.user_id=@userId AND e.branch_id=branches.id)";
+  }
+  const result=await request.query(`UPDATE branches SET branch_name=@name
+    OUTPUT INSERTED.id AS branchId,INSERTED.branch_name AS branchName WHERE id=@id${scope}`);
+  if(!result.recordset[0])return fail(res,404,"Không tìm thấy chi nhánh hoặc bạn không có quyền đổi tên");
+  res.json({success:true,message:"Đổi tên chi nhánh thành công",data:result.recordset[0]});
+}catch(error){next(error)}}
+
 async function remove(req,res,next){
  const pool=await getPool(),transaction=new sql.Transaction(pool);let started=false;
  try{
@@ -196,4 +213,4 @@ async function remove(req,res,next){
  }
 }
 
-module.exports={list,detail,create,update,accountStatus,resetPassword,resign,branches,positions,createBranch,remove,employeeBranches,employeeScope};
+module.exports={list,detail,create,update,accountStatus,resetPassword,resign,branches,positions,createBranch,updateBranchName,remove,employeeBranches,employeeScope};

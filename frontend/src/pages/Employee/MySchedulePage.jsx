@@ -1,4 +1,4 @@
-import {useEffect,useMemo,useState} from "react";
+import {useEffect,useMemo,useRef,useState} from "react";
 import {FiCalendar,FiChevronDown,FiChevronLeft,FiChevronRight,FiClock,FiMapPin} from "react-icons/fi";
 import {employeeApi} from "../../api/services";
 import {dateKey,time} from "../../utils/employeeFormat";
@@ -18,6 +18,7 @@ export default function MySchedulePage(){
  const [mode,setMode]=useState("month"),[cursor,setCursor]=useState(()=>new Date(today.getFullYear(),today.getMonth(),1));
  const [selected,setSelected]=useState(()=>dateKey(today)),[items,setItems]=useState([]),[loading,setLoading]=useState(true);
  const [error,setError]=useState(""),[picker,setPicker]=useState(false);
+ const agendaRefs=useRef({});
 
  const range=useMemo(()=>{
   if(mode==="day"){const key=dateKey(localDate(selected));return{from:key,to:key}}
@@ -52,6 +53,11 @@ export default function MySchedulePage(){
   else setSelected(dateKey(addDays(localDate(selected),amount)));
  }
  function chooseMonth(month,year){const next=new Date(year,month,1);setCursor(next);setSelected(dateKey(next));setPicker(false)}
+ function selectCalendarDate(key,hasSchedule){
+  setSelected(key);
+  if(!hasSchedule)return;
+  window.requestAnimationFrame(()=>agendaRefs.current[key]?.scrollIntoView({behavior:"smooth",block:"start"}));
+ }
 
  return <div className="schedule-page">
   {error&&<div className="emp-error">{error}</div>}
@@ -66,7 +72,7 @@ export default function MySchedulePage(){
    <div className="schedule-month-grid">{monthCells.map((date,index)=>{
     if(!date)return <span key={`blank-${index}`}/>;
     const key=dateKey(date),dayItems=byDate[key]||[],isToday=key===dateKey(today),isSelected=key===selected;
-    return <button key={key} className={`${isToday?"today":""} ${isSelected?"selected":""}`} onClick={()=>setSelected(key)}>
+    return <button key={key} className={`${isToday?"today":""} ${isSelected?"selected":""} ${dayItems.length?"has-schedule":""}`} onClick={()=>selectCalendarDate(key,dayItems.length>0)} aria-label={`${date.toLocaleDateString("vi-VN")}${dayItems.length?`, có ${dayItems.length} ca làm`:", không có ca làm"}`}>
      <span>{date.getDate()}</span><i className="schedule-dots">{dayItems.slice(0,3).map(item=><em className={`shift-${shiftColor(item)}`} key={item.scheduleId}/>)}</i>
      {dayItems.length>3&&<small>+{dayItems.length-3}</small>}
     </button>
@@ -82,7 +88,7 @@ export default function MySchedulePage(){
   {mode==="day"&&<section className="schedule-day-nav"><button onClick={()=>changePeriod(-1)}><FiChevronLeft/></button><div><small>{shortDays[localDate(selected).getDay()]}</small><b>{localDate(selected).toLocaleDateString("vi-VN",{day:"2-digit",month:"long",year:"numeric"})}</b></div><button onClick={()=>changePeriod(1)}><FiChevronRight/></button></section>}
 
   {loading?<div className="schedule-loading"><i/><i/><i/></div>:<section className="schedule-agenda">
-   {Object.keys(grouped).sort().map(key=><div className="schedule-date-group" key={key}>
+   {Object.keys(grouped).sort().map(key=><div className={`schedule-date-group ${key===selected?"selected":""}`} key={key} ref={node=>{if(node)agendaRefs.current[key]=node;else delete agendaRefs.current[key]}}>
     <div className="schedule-date-label"><span>{shortDays[localDate(key).getDay()]}, {localDate(key).toLocaleDateString("vi-VN",{day:"2-digit",month:"2-digit"})}</span><i/></div>
     {grouped[key].map(item=><article className={`schedule-shift-card shift-${shiftColor(item)}`} key={item.scheduleId}>
      <i className="schedule-shift-bar"/><div className="schedule-shift-body"><div className="schedule-shift-title"><div><h3>{item.shiftName||`Ca ${item.shiftCode}`}</h3><span>Mã ca {item.shiftCode}</span></div><b className={`schedule-status status-${item.status}`}>{statusLabels[item.status]||item.status}</b></div>

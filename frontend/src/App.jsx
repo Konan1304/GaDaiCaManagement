@@ -29,6 +29,10 @@ import ShiftRegistrationPage from "./pages/Employee/ShiftRegistrationPage";
 import ManagerShiftRegistrationPage from "./pages/Manager/ShiftRegistrationPage";
 import ShiftRegistrationDetailPage from "./pages/Manager/ShiftRegistrationDetailPage";
 import ScheduleBuilderPage from "./pages/Manager/ScheduleBuilderPage";
+import PayrollPage from "./pages/Manager/PayrollPage";
+import PayrollDetailPage from "./pages/Manager/PayrollDetailPage";
+import EmployeePayrollPage from "./pages/Employee/PayrollPage";
+import ManagerAttendancePage from "./pages/Manager/ManagerAttendancePage";
 
 export default function App() {
   return <BrowserRouter><Routes>
@@ -46,6 +50,7 @@ export default function App() {
         <Route path="shift-registration/:periodId" element={<ShiftRegistrationDetailPage />} />
         <Route path="schedules/builder/:periodId" element={<ScheduleBuilderPage />} />
         <Route path="schedules" element={<SchedulePage />} />
+        <Route path="attendance" element={<ManagerAttendancePage />} />
         <Route path="inventory" element={<InventoryPage />} />
         <Route path="imports" element={<ImportInventoryPage />} />
         <Route path="exports" element={<ManagerUtilityPage type="exports" />} />
@@ -53,6 +58,8 @@ export default function App() {
         <Route path="categories" element={<ManagerUtilityPage type="categories" />} />
         <Route path="suppliers" element={<ManagerUtilityPage type="suppliers" />} />
         <Route path="reports" element={<ReportsPage />} />
+        <Route path="payrolls" element={<PayrollPage />} />
+        <Route path="payrolls/:employeeId" element={<PayrollDetailPage />} />
         <Route path="notifications" element={<ManagerUtilityPage type="notifications" />} />
         <Route path="settings" element={<ManagerUtilityPage type="settings" />} />
       </Route>
@@ -73,6 +80,7 @@ export default function App() {
         <Route path="leave-request" element={<LeaveRequestPage />} />
         <Route path="notifications" element={<NotificationsPage />} />
         <Route path="profile" element={<ProfilePage />} />
+        <Route path="payroll" element={<EmployeePayrollPage />} />
       </Route>
     </Route>
     <Route path="*" element={<RoleHome />} />
