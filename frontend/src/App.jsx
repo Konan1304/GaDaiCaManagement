@@ -33,6 +33,8 @@ import PayrollPage from "./pages/Manager/PayrollPage";
 import PayrollDetailPage from "./pages/Manager/PayrollDetailPage";
 import EmployeePayrollPage from "./pages/Employee/PayrollPage";
 import ManagerAttendancePage from "./pages/Manager/ManagerAttendancePage";
+import CategoriesPage from "./pages/Manager/CategoriesPage";
+import SuppliersPage from "./pages/Manager/SuppliersPage";
 
 export default function App() {
   return <BrowserRouter><Routes>
@@ -55,8 +57,8 @@ export default function App() {
         <Route path="imports" element={<ImportInventoryPage />} />
         <Route path="exports" element={<ManagerUtilityPage type="exports" />} />
         <Route path="products" element={<ProductsPage />} />
-        <Route path="categories" element={<ManagerUtilityPage type="categories" />} />
-        <Route path="suppliers" element={<ManagerUtilityPage type="suppliers" />} />
+        <Route path="categories" element={<CategoriesPage />} />
+        <Route path="suppliers" element={<SuppliersPage />} />
         <Route path="reports" element={<ReportsPage />} />
         <Route path="payrolls" element={<PayrollPage />} />
         <Route path="payrolls/:employeeId" element={<PayrollDetailPage />} />

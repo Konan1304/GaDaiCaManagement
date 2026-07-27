@@ -1,0 +1,13 @@
+const router=require("express").Router();
+const authenticate=require("../middleware/authMiddleware");
+const allowRoles=require("../middleware/roleMiddleware");
+const controller=require("../controllers/importController");
+router.use(authenticate,allowRoles("admin","manager"));
+router.get("/",controller.list);
+router.get("/:id",controller.detail);
+router.post("/",controller.create);
+router.put("/:id",controller.update);
+router.delete("/:id",controller.remove);
+router.post("/:id/confirm",controller.confirm);
+router.post("/:id/adjustments",controller.adjust);
+module.exports=router;

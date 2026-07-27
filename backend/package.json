@@ -15,6 +15,10 @@
     ,"seed:july-full-attendance-test": "node scripts/seedJuly2026FullAttendanceTest.js"
     ,"cleanup:july-full-attendance-test": "node scripts/cleanupJuly2026FullAttendanceTest.js"
     ,"verify:july-full-attendance-test": "node scripts/verifyJuly2026FullAttendanceTest.js"
+    ,"seed:inventory-categories": "node scripts/seedInventoryCategories.js"
+    ,"migrate:suppliers": "node scripts/runSupplierMigration.js"
+    ,"seed:real-suppliers": "node scripts/seedRealSuppliers.js"
+    ,"migrate:imports": "node scripts/runPurchaseImportsMigration.js"
 },
   "keywords": [],
   "author": "",

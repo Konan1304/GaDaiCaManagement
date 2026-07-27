@@ -1,0 +1,5 @@
+database/backups/
+backend/server-output.log
+backend/server-error.log
+frontend/vite-output.log
+frontend/vite-error.log

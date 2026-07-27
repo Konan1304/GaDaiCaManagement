@@ -14,6 +14,29 @@ export const productApi = {
   update: (id,payload) => axiosClient.put(`/products/${id}`, payload).then(r=>r.data),
   remove: (id) => axiosClient.delete(`/products/${id}`).then(r=>r.data),
 };
+export const categoryApi = {
+  list: params => axiosClient.get("/categories",{params}).then(r=>r.data),
+  detail: id => axiosClient.get(`/categories/${id}`).then(r=>r.data),
+  create: payload => axiosClient.post("/categories",payload).then(r=>r.data),
+  update: (id,payload) => axiosClient.put(`/categories/${id}`,payload).then(r=>r.data),
+  remove: id => axiosClient.delete(`/categories/${id}`).then(r=>r.data),
+};
+export const supplierApi = {
+  list: params => axiosClient.get("/suppliers",{params}).then(r=>r.data),
+  detail: id => axiosClient.get(`/suppliers/${id}`).then(r=>r.data),
+  create: payload => axiosClient.post("/suppliers",payload).then(r=>r.data),
+  update: (id,payload) => axiosClient.put(`/suppliers/${id}`,payload).then(r=>r.data),
+  remove: id => axiosClient.delete(`/suppliers/${id}`).then(r=>r.data),
+};
+export const importApi = {
+  list: params => axiosClient.get("/imports",{params}).then(r=>r.data),
+  detail: id => axiosClient.get(`/imports/${id}`).then(r=>r.data),
+  create: payload => axiosClient.post("/imports",payload).then(r=>r.data),
+  update: (id,payload) => axiosClient.put(`/imports/${id}`,payload).then(r=>r.data),
+  remove: id => axiosClient.delete(`/imports/${id}`).then(r=>r.data),
+  confirm: id => axiosClient.post(`/imports/${id}/confirm`).then(r=>r.data),
+  adjust: (id,payload) => axiosClient.post(`/imports/${id}/adjustments`,payload).then(r=>r.data),
+};
 export const dashboardApi = { get: () => axiosClient.get("/dashboard").then(r=>r.data) };
 export const payrollApi = {
   list: params => axiosClient.get("/manager/payrolls",{params}).then(r=>r.data),

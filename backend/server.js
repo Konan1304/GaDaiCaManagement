@@ -16,6 +16,9 @@ app.use("/api/profile", require("./routes/profileRoutes"));
 app.use("/api/shifts", require("./routes/shiftRoutes"));
 app.use("/api/orders", require("./routes/orderRoutes"));
 app.use("/api/products", require("./routes/productRoutes"));
+app.use("/api/categories", require("./routes/categoryRoutes"));
+app.use("/api/suppliers", require("./routes/supplierRoutes"));
+app.use("/api/imports", require("./routes/importRoutes"));
 app.use("/api/dashboard", require("./routes/dashboardRoutes"));
 app.use("/api/employee", require("./routes/employeeOperationsRoutes"));
 app.use("/api/manager", require("./routes/employeeRoutes"));
@@ -23,8 +26,8 @@ app.use("/api/manager", require("./routes/employeeRoutes"));
 // CRUD theo tên nghiệp vụ; model được introspect trực tiếp từ SQL Server.
 const crudMappings = {
   users:"users", roles:"roles", branches:"branches", positions:"positions", employees:"employees",
-  schedules:"schedules", attendance:"attendance", categories:"categories", suppliers:"suppliers",
-  imports:"imports", "import-details":"import_details", "order-items":"order_items",
+  schedules:"schedules", attendance:"attendance",
+  "import-details":"import_details", "order-items":"order_items",
   "cash-reports":"cash_reports", notifications:"notifications", settings:"settings",
   units:"units", "leave-requests":"leave_requests", "attendance-devices":"attendance_devices",
   inventory:"branch_inventories", "inventory-transactions":"inventory_transactions",
