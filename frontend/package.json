@@ -4,9 +4,12 @@
   "private": true,
   "type": "module",
   "scripts": {
-  "start": "vite --open",
-  "dev": "vite",
-  "build": "vite build",
+  "start": "vite --mode production --port 5173 --open",
+  "dev": "vite --mode production --port 5173",
+  "dev:production": "vite --mode production --port 5173 --open",
+  "dev:sandbox": "vite --mode sandbox --port 5174 --open",
+  "build": "vite build --mode production",
+  "build:sandbox": "vite build --mode sandbox --outDir dist-sandbox",
   "preview": "vite preview"
 },
   "devDependencies": {

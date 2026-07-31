@@ -1,6 +1,6 @@
 import {useEffect,useMemo,useState} from "react";
 import {FiAlertTriangle,FiCalendar,FiCheckCircle,FiClock,FiDollarSign} from "react-icons/fi";
-import {employeeApi,payrollApi} from "../../api/services";
+import {employeeApi,environmentApi,payrollApi} from "../../api/services";
 
 const money=value=>Math.round(Number(value||0)).toLocaleString("vi-VN")+"đ";
 const statusName={draft:"Lương tạm tính",confirmed:"Đã xác nhận",paid:"Đã trả"};
@@ -27,6 +27,12 @@ function groupWeeks(rows){
 
 export default function EmployeePayrollPage(){
  const [month,setMonth]=useState(new Date().toISOString().slice(0,7)),[data,setData]=useState(null),[attendance,setAttendance]=useState([]),[loading,setLoading]=useState(true),[error,setError]=useState("");
+ useEffect(()=>{
+  if(import.meta.env.VITE_APP_ENV!=="sandbox")return;
+  environmentApi.get().then(result=>{
+   if(result.appEnv==="sandbox"&&result.businessDateTime)setMonth(String(result.businessDateTime).slice(0,7));
+  }).catch(()=>{});
+ },[]);
  useEffect(()=>{setLoading(true);setError("");Promise.all([
   payrollApi.mine(month).then(r=>setData(r.data)),
   employeeApi.attendanceHistory(month).then(r=>setAttendance(r.data||[]))
@@ -61,7 +67,7 @@ export default function EmployeePayrollPage(){
     <div><FiCheckCircle/><small>Tổng ca</small><b>{week.shifts}</b></div><div><FiAlertTriangle/><small>Đi trễ</small><b>{week.late} phút</b></div>
     <div><span className="running-icon">🏃</span><small>Về sớm</small><b>{week.early} phút</b></div><div><FiDollarSign/><small>Lương tuần</small><b>{money(week.minutes/60*Number(payroll.hourlyRate||0))}</b></div>
    </div>
-   <div className="attendance-week-days">{week.items.map(row=><article key={row.attendanceId}><div><b>{displayDate(row.workDate)}</b><small>{row.shiftCode} · {row.shiftName}</small></div><span><small>Vào</small><b>{formatTime(row.checkInTime)}</b></span><span><small>Ra</small><b>{formatTime(row.checkOutTime)}</b></span><span><small>Thời gian</small><b>{row.status==="completed"?formatWorked(row.workedMinutes):"Đang làm"}</b></span><div className="attendance-day-flags">{row.lateMinutes>0&&<em>Trễ {row.lateMinutes}p</em>}{row.earlyLeaveMinutes>0&&<em>Về sớm {row.earlyLeaveMinutes}p</em>}</div></article>)}</div>
+   <div className="attendance-week-days">{week.items.map(row=><article key={row.attendanceId}><div><b>{displayDate(row.workDate)}</b><small>{row.shiftCode} · {row.shiftName}</small></div><span><small>Vào</small><b>{formatTime(row.checkInTime)}</b></span><span><small>Ra</small><b>{formatTime(row.checkOutTime)}</b></span><span><small>Thời gian</small><b>{row.status==="absent"?"Nghỉ không phép":row.status==="missing_checkout"?"Thiếu giờ ra":row.status==="completed"?formatWorked(row.workedMinutes):"Đang làm"}</b></span><div className="attendance-day-flags">{row.lateMinutes>0&&<em>Trễ {row.lateMinutes}p</em>}{row.earlyLeaveMinutes>0&&<em>Về sớm {row.earlyLeaveMinutes}p</em>}</div></article>)}</div>
   </section>)}</div>:<section className="emp-card emp-empty"><FiClock/><span>Tháng này chưa có dữ liệu chấm công.</span></section>}
   </>:<div className="emp-card emp-empty">Không tìm thấy hồ sơ nhân viên</div>}
  </div>

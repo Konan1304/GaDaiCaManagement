@@ -1,9 +1,11 @@
 const {sql,getPool}=require("../config/db");
 const validDate=v=>/^\d{4}-\d{2}-\d{2}$/.test(String(v||""));
 const fail=(res,status,message)=>res.status(status).json({success:false,message});
-const scheduleTestMode=process.env.NODE_ENV!=="production"&&String(process.env.ENABLE_SCHEDULE_TEST_MODE).toLowerCase()==="true";
+// Production không thể bật chế độ lịch quá khứ, kể cả khi cấu hình nhầm cờ test.
+const scheduleTestMode=process.env.APP_ENV==="sandbox"&&String(process.env.ENABLE_SCHEDULE_TEST_MODE).toLowerCase()==="true";
 const vietnamNow=()=>new Date(new Date().toLocaleString("en-US",{timeZone:"Asia/Ho_Chi_Minh"}));
 const dateTimeLocal=value=>new Date(String(value||""));
+const parseShiftDisplayCode=value=>{const match=/^(A|B|P1|P2|P3)(?:([+-])([1-4]))?$/.exec(String(value||"").trim().toUpperCase());return match?{baseShiftCode:match[1],operator:match[2]||null,adjustmentHours:Number(match[3]||0)}:null};
 const generatedTitle=(start,end)=>{
   const format=value=>{const [year,month,day]=value.split("-");return `${day}/${month}`};
   return `Đăng ký lịch ${format(start)} - ${format(end)}`;
@@ -54,8 +56,13 @@ function validatePeriodInput(body){
 async function current(req,res,next){try{const pool=await getPool(),employee=await employeeFor(pool,req.user.userId,false);if(!employee)return res.json({success:true,data:null});const result=await pool.request().input("branchId",sql.Int,employee.branchId).input("employeeId",sql.Int,employee.employeeId).input("testMode",sql.Bit,scheduleTestMode).query(`
  ${periodSelect} WHERE p.branch_id=@branchId AND p.status IN ('open','locked','published') AND (p.is_test=0 OR @testMode=1) ORDER BY CASE p.status WHEN 'open' THEN 0 WHEN 'locked' THEN 1 ELSE 2 END,p.week_start_date DESC;
  ${shiftSelect};
- SELECT r.id,r.period_id AS periodId,r.work_date AS workDate,s.shift_code AS shiftCode,r.preference_level AS preferenceLevel,r.note
- FROM employee_shift_registrations r JOIN shifts s ON s.id=r.shift_id WHERE r.employee_id=@employeeId;
+ SELECT r.id,r.period_id AS periodId,r.work_date AS workDate,COALESCE(r.selection_code,s.shift_code) AS shiftCode,r.preference_level AS preferenceLevel,r.note
+ FROM employee_shift_registrations r LEFT JOIN shifts s ON s.id=r.shift_id WHERE r.employee_id=@employeeId;
+ SELECT e.id AS employeeId,e.employee_code AS employeeCode,u.full_name AS fullName,pos.position_name AS positionName,CONVERT(varchar(19),SYSDATETIME(),126) AS serverTime,
+   r.period_id AS periodId,CONVERT(char(10),r.work_date,23) AS workDate,COALESCE(r.selection_code,s.shift_code) AS shiftCode
+ FROM employees e JOIN users u ON u.id=e.user_id AND u.status='active' JOIN positions pos ON pos.id=e.position_id
+ LEFT JOIN employee_shift_registrations r ON r.employee_id=e.id LEFT JOIN shifts s ON s.id=r.shift_id
+ WHERE e.branch_id=@branchId AND e.status='working' ORDER BY u.full_name,r.work_date;
  SELECT CONVERT(varchar(19),SYSDATETIME(),126) AS serverTime;`);
  const period=result.recordsets[0][0];if(!period){console.info(`[shift-registration] user=${req.user.userId}, employee=${employee.employeeId}, branch=${employee.branchId}: không có period phù hợp`);return res.json({success:true,data:null})}const serverTime=result.recordsets[3][0].serverTime;
  period.startDate=period.weekStartDate;period.endDate=period.weekEndDate;period.serverTime=serverTime;period.canRegister=period.status==="open"&&(period.isTest&&scheduleTestMode||new Date(serverTime)>=new Date(period.registrationOpenAt)&&new Date(serverTime)<=new Date(period.registrationCloseAt))&&employee.employeeStatus==="working"&&employee.accountStatus==="active";period.shifts=result.recordsets[1];period.existingRegistrations=result.recordsets[2].filter(x=>Number(x.periodId)===Number(period.periodId));res.json({success:true,data:period});
@@ -127,7 +134,8 @@ async function publishDraft(req,res,next){const pool=await getPool(),tx=new sql.
  if(!p||!["locked","published"].includes(p.status)){await tx.rollback();started=false;return fail(res,409,"Chỉ công bố sau khi đã khóa đăng ký")}
  if(p.is_test&&!scheduleTestMode){await tx.rollback();started=false;return fail(res,403,"Chế độ kiểm thử đang tắt")}
  const drafts=await new sql.Request(tx).input("periodId",sql.Int,p.id).query("SELECT * FROM schedule_draft_assignments WHERE period_id=@periodId");
- if(!drafts.recordset.length){await tx.rollback();started=false;return fail(res,409,"Chưa có bản nháp lịch để công bố")}
+ // Ô không được Admin xếp ca được hiểu là ngày nghỉ. Chỉ các dòng có ca trong
+ // schedule_draft_assignments mới được đưa vào lịch chính thức.
  const cleanup=new sql.Request(tx).input("branchId",sql.Int,p.branch_id).input("start",sql.Date,p.week_start_date).input("end",sql.Date,p.week_end_date);
  if(p.is_test)await cleanup.query(`
    DELETE al FROM attendance_logs al JOIN employee_schedules es ON es.id=al.schedule_id
@@ -140,8 +148,8 @@ async function publishDraft(req,res,next){const pool=await getPool(),tx=new sql.
    await new sql.Request(tx).input("branchId",sql.Int,p.branch_id).input("start",sql.Date,p.week_start_date).input("end",sql.Date,p.week_end_date)
      .query("DELETE FROM employee_schedules WHERE is_test=0 AND branch_id=@branchId AND work_date BETWEEN @start AND @end");
  }
- await new sql.Request(tx).input("periodId",sql.Int,p.id).input("branchId",sql.Int,p.branch_id).input("isTest",sql.Bit,Boolean(p.is_test)).input("userId",sql.Int,req.user.userId).query(`INSERT INTO employee_schedules(employee_id,shift_id,branch_id,work_date,work_position,note,status,is_test,created_by)
-   SELECT employee_id,shift_id,@branchId,work_date,work_position,note,'scheduled',@isTest,@userId FROM schedule_draft_assignments WHERE period_id=@periodId`);
+ await new sql.Request(tx).input("periodId",sql.Int,p.id).input("branchId",sql.Int,p.branch_id).input("isTest",sql.Bit,Boolean(p.is_test)).input("userId",sql.Int,req.user.userId).query(`INSERT INTO employee_schedules(employee_id,shift_id,branch_id,work_date,display_code,start_time_override,end_time_override,work_position,note,status,is_test,created_by)
+   SELECT employee_id,shift_id,@branchId,work_date,display_code,start_time_override,end_time_override,work_position,note,'scheduled',@isTest,@userId FROM schedule_draft_assignments WHERE period_id=@periodId`);
  await new sql.Request(tx).input("id",sql.Int,p.id).input("userId",sql.Int,req.user.userId).query("UPDATE schedule_registration_periods SET status='published',published_by=@userId,published_at=SYSDATETIME(),updated_at=SYSDATETIME() WHERE id=@id");
  await new sql.Request(tx).input("branchId",sql.Int,p.branch_id).input("periodId",sql.Int,p.id).input("content",sql.NVarChar(1000),`Lịch làm từ ${new Date(p.week_start_date).toLocaleDateString("vi-VN")} đến ${new Date(p.week_end_date).toLocaleDateString("vi-VN")} đã được cập nhật.`).query("INSERT INTO notifications(user_id,notification_type,title,content,reference_type,reference_id) SELECT e.user_id,'schedule_published',N'Lịch làm mới đã được công bố',@content,'schedule_registration_period',@periodId FROM employees e JOIN users u ON u.id=e.user_id WHERE e.branch_id=@branchId AND e.status='working' AND u.status='active'");
  await tx.commit();started=false;res.json({success:true,message:"Công bố lịch thành công",data:{count:drafts.recordset.length}});
@@ -172,16 +180,18 @@ async function builderGetV2(req,res,next){try{
   WHERE rp.id=@periodId ORDER BY u.full_name;
   ${shiftSelect};
   SELECT r.employee_id AS employeeId,CONVERT(char(10),r.work_date,23) AS workDate,
-    r.shift_id AS shiftId,s.shift_code AS shiftCode,s.shift_name AS shiftName,
+    r.shift_id AS shiftId,COALESCE(r.selection_code,s.shift_code) AS shiftCode,s.shift_name AS shiftName,
     s.start_time AS startTime,s.end_time AS endTime,r.note
   FROM employee_shift_registrations r
   JOIN employees e ON e.id=r.employee_id
   JOIN schedule_registration_periods rp ON rp.id=r.period_id
-  JOIN shifts s ON s.id=r.shift_id
+  LEFT JOIN shifts s ON s.id=r.shift_id
   WHERE r.period_id=@periodId AND e.branch_id=rp.branch_id
   ORDER BY r.employee_id,r.work_date;
   SELECT d.employee_id AS employeeId,CONVERT(char(10),d.work_date,23) AS workDate,
-    d.shift_id AS shiftId,s.shift_code AS shiftCode,d.work_position AS workPosition,d.note
+    d.shift_id AS shiftId,s.shift_code AS shiftCode,COALESCE(d.display_code,s.shift_code) AS displayCode,
+    CONVERT(char(5),COALESCE(d.start_time_override,s.start_time),108) AS startTime,
+    CONVERT(char(5),COALESCE(d.end_time_override,s.end_time),108) AS endTime,d.work_position AS workPosition,d.note
   FROM schedule_draft_assignments d JOIN shifts s ON s.id=d.shift_id
   WHERE d.period_id=@periodId ORDER BY d.employee_id,d.work_date;
  `);
@@ -195,6 +205,8 @@ async function saveEmployeeV2(req,res,next){
   const employee=await employeeFor(pool,req.user.userId);
   if(!employee)return fail(res,403,"Nhân viên không ở trạng thái làm việc");
   const registrations=Array.isArray(req.body.registrations)?req.body.registrations:[];
+  const requestedEmployeeIds=[req.body.employeeId,...registrations.map(item=>item.employeeId)].filter(value=>value!==undefined&&value!==null&&value!=="");
+  if(requestedEmployeeIds.some(value=>Number(value)!==Number(employee.employeeId)))return fail(res,403,"Bạn chỉ được chỉnh sửa dòng đăng ký của chính mình");
   await tx.begin();started=true;
   const periodResult=await new sql.Request(tx).input("id",sql.Int,req.params.periodId)
     .query("SELECT * FROM schedule_registration_periods WITH(UPDLOCK) WHERE id=@id");
@@ -203,28 +215,28 @@ async function saveEmployeeV2(req,res,next){
   if(Number(period.branch_id)!==Number(employee.branchId)){await tx.rollback();started=false;return fail(res,403,"Đợt đăng ký không thuộc chi nhánh của bạn")}
   // Trạng thái do admin điều khiển là nguồn quyết định duy nhất: open được lưu, các trạng thái khác bị khóa.
   if(String(period.status||"").trim()!=="open"){await tx.rollback();started=false;return fail(res,409,"Quản lý đã khóa đợt đăng ký ca")}
-  const shifts=await new sql.Request(tx).query(shiftSelect),byCode=new Map(shifts.recordset.map(item=>[item.shiftCode,item]));
+  const shifts=await new sql.Request(tx).query(shiftSelect),byCode=new Map(shifts.recordset.map(item=>[item.shiftCode,item])),allowed=new Set(["OFF","FULL","A","B","P1","P2","P3"]);
   const start=new Date(period.week_start_date).toLocaleDateString("en-CA",{timeZone:"Asia/Ho_Chi_Minh"});
   const end=new Date(period.week_end_date).toLocaleDateString("en-CA",{timeZone:"Asia/Ho_Chi_Minh"});
   for(const item of registrations){
    const code=String(item.shiftCode||"").toUpperCase();
-   if(!validDate(item.workDate)||item.workDate<start||item.workDate>end||!byCode.has(code)){
+   if(!validDate(item.workDate)||item.workDate<start||item.workDate>end||!allowed.has(code)){
     await tx.rollback();started=false;return fail(res,400,"Ngày hoặc ca đăng ký không hợp lệ");
    }
   }
   await new sql.Request(tx).input("periodId",sql.Int,period.id).input("employeeId",sql.Int,employee.employeeId)
     .query("DELETE FROM employee_shift_registrations WHERE period_id=@periodId AND employee_id=@employeeId");
   for(const item of registrations){
-   const shift=byCode.get(String(item.shiftCode).toUpperCase());
+   const code=String(item.shiftCode).toUpperCase(),shift=byCode.get(code);
    await new sql.Request(tx).input("periodId",sql.Int,period.id).input("employeeId",sql.Int,employee.employeeId)
-    .input("date",sql.Date,item.workDate).input("shiftId",sql.Int,shift.shiftId)
+    .input("date",sql.Date,item.workDate).input("shiftId",sql.Int,shift?.shiftId||null).input("selectionCode",sql.VarChar(10),code)
     .input("preference",sql.VarChar(20),item.preferenceLevel==="preferred"?"preferred":"available")
     .input("note",sql.NVarChar(500),req.body.note||item.note||null)
-    .query("INSERT INTO employee_shift_registrations(period_id,employee_id,work_date,shift_id,preference_level,note) VALUES(@periodId,@employeeId,@date,@shiftId,@preference,@note)");
+    .query("INSERT INTO employee_shift_registrations(period_id,employee_id,work_date,shift_id,selection_code,preference_level,note) VALUES(@periodId,@employeeId,@date,@shiftId,@selectionCode,@preference,@note)");
   }
   await tx.commit();started=false;
   const result=await pool.request().input("periodId",sql.Int,period.id).input("employeeId",sql.Int,employee.employeeId)
-   .query("SELECT r.id,CONVERT(char(10),r.work_date,23) AS workDate,s.shift_code AS shiftCode,r.preference_level AS preferenceLevel,r.note FROM employee_shift_registrations r JOIN shifts s ON s.id=r.shift_id WHERE r.period_id=@periodId AND r.employee_id=@employeeId ORDER BY r.work_date");
+   .query("SELECT r.id,CONVERT(char(10),r.work_date,23) AS workDate,COALESCE(r.selection_code,s.shift_code) AS shiftCode,r.preference_level AS preferenceLevel,r.note FROM employee_shift_registrations r LEFT JOIN shifts s ON s.id=r.shift_id WHERE r.period_id=@periodId AND r.employee_id=@employeeId ORDER BY r.work_date");
   res.json({success:true,message:"Bạn đã lưu đăng ký thành công",data:result.recordset});
  }catch(error){if(started)await tx.rollback().catch(()=>{});next(error)}
 }
@@ -263,8 +275,8 @@ async function managerSchedules(req,res,next){try{
   JOIN branches b ON b.id=e.branch_id WHERE ${employeeWhere.join(" AND ")}
   ORDER BY b.branch_name,p.position_name,u.full_name;
   SELECT es.id AS scheduleId,es.employee_id AS employeeId,CONVERT(char(10),es.work_date,23) AS workDate,
-    s.shift_code AS shiftCode,s.shift_name AS shiftName,CONVERT(char(5),s.start_time,108) AS startTime,
-    CONVERT(char(5),s.end_time,108) AS endTime,es.status,es.work_position AS workPosition,es.note
+    COALESCE(es.display_code,s.shift_code) AS shiftCode,s.shift_name AS shiftName,CONVERT(char(5),COALESCE(es.start_time_override,s.start_time),108) AS startTime,
+    CONVERT(char(5),COALESCE(es.end_time_override,s.end_time),108) AS endTime,es.status,es.work_position AS workPosition,es.note
   FROM employee_schedules es JOIN shifts s ON s.id=es.shift_id
   WHERE ${scheduleWhere.join(" AND ")}
     AND EXISTS(SELECT 1 FROM schedule_registration_periods rp WHERE rp.branch_id=es.branch_id
@@ -274,4 +286,55 @@ async function managerSchedules(req,res,next){try{
  res.json({success:true,data:{period:{from,to},employees:result.recordsets[0],schedules:result.recordsets[1]}});
 }catch(error){next(error)}}
 
-module.exports={current,saveEmployee:saveEmployeeV2,saveEmployeeCurrent:saveEmployeeCurrentV2,periods,periodsScoped,managerScope,periodDetail,validateCreatePeriod,createPeriod,updatePeriod,deletePeriod:deletePeriodAny,transition,builderGet:builderGetV2,builderSave:builderSaveDraftV2,publish:publishDraftV2,managerSchedules};
+async function currentWeekly(req,res,next){try{
+ const pool=await getPool(),employee=await employeeFor(pool,req.user.userId,false);
+ if(!employee)return res.json({success:true,data:null});
+ const result=await pool.request().input("branchId",sql.Int,employee.branchId).input("employeeId",sql.Int,employee.employeeId).input("testMode",sql.Bit,scheduleTestMode).query(`
+  DECLARE @currentPeriodId INT=(SELECT TOP 1 p.id FROM schedule_registration_periods p
+   WHERE p.branch_id=@branchId AND p.status IN ('open','locked','published') AND (p.is_test=0 OR @testMode=1)
+   ORDER BY CASE p.status WHEN 'open' THEN 0 WHEN 'locked' THEN 1 ELSE 2 END,p.week_start_date DESC);
+  ${periodSelect} WHERE p.id=@currentPeriodId;
+  ${shiftSelect};
+  SELECT e.id AS employeeId,e.employee_code AS employeeCode,u.full_name AS fullName,pos.position_name AS positionName,r.period_id AS periodId,
+   CONVERT(char(10),r.work_date,23) AS workDate,COALESCE(r.selection_code,s.shift_code) AS shiftCode,r.note
+  FROM employees e JOIN users u ON u.id=e.user_id AND u.status='active' JOIN positions pos ON pos.id=e.position_id
+  LEFT JOIN employee_shift_registrations r ON r.employee_id=e.id AND r.period_id=@currentPeriodId LEFT JOIN shifts s ON s.id=r.shift_id
+  WHERE e.branch_id=@branchId AND e.status='working' ORDER BY u.full_name,r.work_date;
+  SELECT CONVERT(varchar(19),SYSDATETIME(),126) AS serverTime;`);
+ const period=result.recordsets[0][0];if(!period)return res.json({success:true,data:null});
+ const serverTime=result.recordsets[3][0].serverTime;
+ period.startDate=period.weekStartDate;period.endDate=period.weekEndDate;period.serverTime=serverTime;
+ period.currentEmployeeId=employee.employeeId;period.shifts=result.recordsets[1];
+ period.tableRows=result.recordsets[2];period.existingRegistrations=period.tableRows.filter(row=>Number(row.employeeId)===Number(employee.employeeId)&&row.workDate);
+ period.canRegister=period.status==="open"&&(period.isTest&&scheduleTestMode||new Date(serverTime)>=new Date(period.registrationOpenAt)&&new Date(serverTime)<=new Date(period.registrationCloseAt))&&employee.employeeStatus==="working"&&employee.accountStatus==="active";
+ res.json({success:true,data:period});
+}catch(error){next(error)}}
+
+async function periodDetailWeekly(req,res,next){try{
+ const result=await (await getPool()).request().input("id",sql.Int,req.params.id).query(`
+  ${periodSelect} WHERE p.id=@id; ${shiftSelect};
+  SELECT e.id AS employeeId,e.employee_code AS employeeCode,u.full_name AS fullName,pos.position_name AS positionName,e.position_id AS positionId,
+   CONVERT(char(10),r.work_date,23) AS workDate,COALESCE(r.selection_code,s.shift_code) AS shiftCode,r.note
+  FROM schedule_registration_periods rp JOIN employees e ON e.branch_id=rp.branch_id AND e.status='working'
+  JOIN users u ON u.id=e.user_id AND u.status='active' JOIN positions pos ON pos.id=e.position_id
+  LEFT JOIN employee_shift_registrations r ON r.period_id=rp.id AND r.employee_id=e.id LEFT JOIN shifts s ON s.id=r.shift_id
+  WHERE rp.id=@id ORDER BY u.full_name,r.work_date;`);
+ if(!result.recordsets[0][0])return fail(res,404,"Không tìm thấy đợt đăng ký");
+ res.json({success:true,data:{period:result.recordsets[0][0],shifts:result.recordsets[1],rows:result.recordsets[2]}});
+}catch(error){next(error)}}
+
+async function builderSaveWeekly(req,res,next){const pool=await getPool(),tx=new sql.Transaction(pool);let started=false;try{
+ const list=Array.isArray(req.body.schedules)?req.body.schedules:[];await tx.begin();started=true;
+ const period=(await new sql.Request(tx).input("id",sql.Int,req.params.periodId).query("SELECT * FROM schedule_registration_periods WITH(UPDLOCK) WHERE id=@id")).recordset[0];
+ if(!period){await tx.rollback();started=false;return fail(res,404,"Không tìm thấy đợt đăng ký")}
+ if(!["open","locked","published"].includes(period.status)){await tx.rollback();started=false;return fail(res,409,"Đợt đăng ký không ở trạng thái có thể xếp lịch")}
+ const shifts=(await new sql.Request(tx).query(shiftSelect)).recordset,byCode=new Map(shifts.map(item=>[item.shiftCode,item]));
+ const ids=new Set((await new sql.Request(tx).input("branchId",sql.Int,period.branch_id).query("SELECT id FROM employees WHERE branch_id=@branchId AND status='working'")).recordset.map(item=>Number(item.id)));
+ const start=new Date(period.week_start_date).toISOString().slice(0,10),end=new Date(period.week_end_date).toISOString().slice(0,10);
+ for(const item of list){const parsed=parseShiftDisplayCode(item.displayCode);if(!ids.has(Number(item.employeeId))||!validDate(item.workDate)||item.workDate<start||item.workDate>end||!byCode.has(item.shiftCode)||!parsed||parsed.baseShiftCode!==item.shiftCode||!/^\d{2}:\d{2}$/.test(item.startTime||"")||!/^\d{2}:\d{2}$/.test(item.endTime||"")||item.startTime>=item.endTime){await tx.rollback();started=false;return fail(res,400,"Mã ca hoặc khung giờ không hợp lệ. Ví dụ: A, A-1, A+1, B+1, P3-1.")}}
+ await new sql.Request(tx).input("periodId",sql.Int,period.id).query("DELETE schedule_draft_assignments WHERE period_id=@periodId");
+ for(const item of list){const base=byCode.get(item.shiftCode);await new sql.Request(tx).input("periodId",sql.Int,period.id).input("employeeId",sql.Int,item.employeeId).input("shiftId",sql.Int,base.shiftId).input("date",sql.Date,item.workDate).input("display",sql.NVarChar(30),String(item.displayCode||item.shiftCode).trim()).input("start",sql.Time,item.startTime).input("end",sql.Time,item.endTime).input("position",sql.NVarChar(100),item.workPosition||null).input("note",sql.NVarChar(500),item.note||null).input("userId",sql.Int,req.user.userId).query("INSERT schedule_draft_assignments(period_id,employee_id,work_date,shift_id,display_code,start_time_override,end_time_override,work_position,note,created_by) VALUES(@periodId,@employeeId,@date,@shiftId,@display,@start,@end,@position,@note,@userId)")}
+ await tx.commit();started=false;res.json({success:true,message:"Đã lưu bản nháp xếp lịch",data:{count:list.length}});
+}catch(error){if(started)await tx.rollback().catch(()=>{});next(error)}}
+
+module.exports={current:currentWeekly,saveEmployee:saveEmployeeV2,saveEmployeeCurrent:saveEmployeeCurrentV2,periods,periodsScoped,managerScope,periodDetail:periodDetailWeekly,validateCreatePeriod,createPeriod,updatePeriod,deletePeriod:deletePeriodAny,transition,builderGet:builderGetV2,builderSave:builderSaveWeekly,publish:publishDraftV2,managerSchedules};

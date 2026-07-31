@@ -1,0 +1,9 @@
+const {sql}=require("../config/db");
+const requestFor=executor=>executor.request?executor.request():new sql.Request(executor);
+async function record(executor,{sessionId,branchId,userId,employeeId,action,oldStatus=null,newStatus=null,reason=null,payload={}}){
+  const isTest=process.env.APP_ENV==="sandbox";
+  await requestFor(executor).input("sessionId",sql.Int,sessionId||null).input("branchId",sql.Int,branchId).input("action",sql.VarChar(40),action).input("oldStatus",sql.VarChar(30),oldStatus).input("newStatus",sql.VarChar(30),newStatus).input("userId",sql.Int,userId).input("reason",sql.NVarChar(500),reason).input("payload",sql.NVarChar(sql.MAX),JSON.stringify(payload)).input("isTest",sql.Bit,isTest).query(`INSERT dbo.shift_operation_audit_logs(shift_session_id,branch_id,action,old_status,new_status,changed_by,reason,payload_json,is_test) VALUES(@sessionId,@branchId,@action,@oldStatus,@newStatus,@userId,@reason,@payload,@isTest)`);
+  const eventMap={SHIFT_OPENED:"SHIFT_OPENED",REPORT_DRAFT_SAVED:"SHIFT_REPORT_DRAFT_SAVED",REPORT_SUBMITTED:"SHIFT_REPORT_SUBMITTED",HANDOVER_ACCEPTED:"SHIFT_HANDOVER_ACCEPTED",HANDOVER_DISPUTED:"SHIFT_HANDOVER_DISPUTED",SHIFT_LOCKED:"SHIFT_LOCKED",SHIFT_UNLOCKED:"SHIFT_REPORT_UNLOCKED"};
+  if(eventMap[action])await requestFor(executor).input("type",sql.VarChar(60),eventMap[action]).input("branchId",sql.Int,branchId).input("userId",sql.Int,userId).input("employeeId",sql.Int,employeeId||null).input("entityId",sql.BigInt,sessionId).input("payload",sql.NVarChar(sql.MAX),JSON.stringify(payload)).input("isTest",sql.Bit,isTest).query(`INSERT dbo.business_events(event_type,branch_id,actor_user_id,actor_employee_id,entity_type,entity_id,payload_json,is_test) VALUES(@type,@branchId,@userId,@employeeId,'shift_session',@entityId,@payload,@isTest)`);
+}
+module.exports={record};

@@ -1,5 +1,6 @@
 import {useEffect,useMemo,useState} from "react";
 import {FiAlertTriangle,FiCheckCircle,FiClock,FiEdit2,FiEye,FiSearch,FiUsers,FiX} from "react-icons/fi";
+import {Link} from "react-router-dom";
 import {managerAttendanceApi} from "../../api/services";
 
 const pad=value=>String(value).padStart(2,"0");
@@ -9,7 +10,8 @@ const time=value=>value?String(value).slice(11,16):"—";
 const date=value=>value?value.split("-").reverse().join("/"):"—";
 const minutes=value=>value==null?"—":`${Math.floor(Number(value)/60)} giờ ${Number(value)%60} phút`;
 const toInput=value=>value?String(value).slice(0,16):"";
-const statusLabel={not_checked_in:"Chưa chấm công",working:"Đang làm việc",completed:"Hoàn thành",late:"Đi trễ",early_leave:"Về sớm",missing_checkout:"Thiếu giờ ra"};
+const isSandbox=import.meta.env.VITE_APP_ENV==="sandbox";
+const statusLabel={not_checked_in:"Chưa chấm công",working:"Đang làm việc",completed:"Hoàn thành",late:"Đi trễ",early_leave:"Về sớm",missing_checkout:"Thiếu giờ ra",absent:"Nghỉ không phép"};
 
 function AttendanceModal({row,onClose,onSaved}){
   const [editing,setEditing]=useState(!row.attendanceId);
@@ -57,7 +59,7 @@ export default function ManagerAttendancePage(){
   const saved=response=>{setSelected(null);setSuccess(response.message+(response.data?.payrollLocked?" Kỳ lương đã chốt nên bảng lương cũ không tự thay đổi.":""));load()};
   const employees=options.employees.filter(item=>!filters.branchId||String(item.branchId)===String(filters.branchId)),summary=data.summary||{};
   return <div className="manager-attendance-page">
-    <div className="section-title"><div><h1>Quản lý chấm công</h1><p>Theo dõi giờ vào, giờ ra và thời gian làm việc của nhân viên.</p></div></div>
+    <div className="section-title"><div><h1>Quản lý chấm công</h1><p>Theo dõi giờ vào, giờ ra và thời gian làm việc của nhân viên.</p></div>{isSandbox&&<Link className="btn btn-yellow" to="/manager/attendance/test">Tạo dữ liệu chấm công kiểm thử</Link>}</div>
     {success&&<div className="manager-form-success">{success}</div>}{error&&<div className="manager-form-error">{error}</div>}
     <form className="attendance-filters" onSubmit={apply}>
       <label>Từ ngày<input type="date" value={filters.from} onChange={e=>setFilters({...filters,from:e.target.value})}/></label>
@@ -66,7 +68,7 @@ export default function ManagerAttendancePage(){
       <label>Nhân viên<select value={filters.employeeId} onChange={e=>setFilters({...filters,employeeId:e.target.value})}><option value="">Tất cả nhân viên</option>{employees.map(x=><option key={x.employeeId} value={x.employeeId}>{x.fullName} ({x.employeeCode})</option>)}</select></label>
       <label>Vị trí<select value={filters.positionId} onChange={e=>setFilters({...filters,positionId:e.target.value})}><option value="">Tất cả vị trí</option>{options.positions.map(x=><option key={x.positionId} value={x.positionId}>{x.positionName}</option>)}</select></label>
       <label>Trạng thái<select value={filters.status} onChange={e=>setFilters({...filters,status:e.target.value})}><option value="">Tất cả</option>{Object.entries(statusLabel).map(([key,label])=><option key={key} value={key}>{label}</option>)}</select></label>
-      <label>Loại dữ liệu<select value={filters.dataType} onChange={e=>setFilters({...filters,dataType:e.target.value})}><option value="all">Tất cả</option><option value="real">Dữ liệu thật</option><option value="test">Dữ liệu test</option></select></label>
+      {isSandbox&&<label>Loại dữ liệu<select value={filters.dataType} onChange={e=>setFilters({...filters,dataType:e.target.value})}><option value="all">Tất cả</option><option value="test">Dữ liệu test</option></select></label>}
       <label className="attendance-search">Tìm nhân viên<span><FiSearch/><input value={filters.search} onChange={e=>setFilters({...filters,search:e.target.value})} placeholder="Tên hoặc mã nhân viên"/></span></label>
       <div className="attendance-filter-actions"><button type="button" className="btn btn-light" onClick={today}>Hôm nay</button><button className="btn btn-yellow">Lọc</button></div>
     </form>

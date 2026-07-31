@@ -1,5 +1,6 @@
 import {NavLink} from "react-router-dom";
-import {FiBarChart2,FiBell,FiBox,FiCalendar,FiClipboard,FiClock,FiDollarSign,FiGrid,FiLogOut,FiPackage,FiPlusSquare,FiSettings,FiShoppingBag,FiTag,FiTruck,FiUsers,FiX} from "react-icons/fi";
+import {FiBarChart2,FiBell,FiBox,FiCalendar,FiClipboard,FiClock,FiDollarSign,FiGrid,FiLogOut,FiMessageCircle,FiPackage,FiPlusSquare,FiSettings,FiShoppingBag,FiTag,FiTruck,FiUsers,FiX} from "react-icons/fi";
+const isSandbox=import.meta.env.VITE_APP_ENV==="sandbox";
 
 const menuGroups=[
   {title:"TỔNG QUAN",items:[
@@ -21,10 +22,12 @@ const menuGroups=[
     ["/manager/suppliers","Nhà cung cấp",FiPackage],
   ]},
   {title:"QUẢN LÝ CỬA HÀNG",items:[
+    ...(isSandbox?[["/manager/operations","Vận hành ca",FiClock],["/manager/operations/dashboard","Dashboard vận hành",FiGrid],["/manager/chat","Chat nội bộ",FiMessageCircle]]:[]),
     ["/manager/reports","Báo cáo",FiBarChart2],
   ]},
   {title:"HỆ THỐNG",items:[
     ["/manager/notifications","Thông báo",FiBell],
+    ...(isSandbox?[["/manager/notification-center","Notification Center",FiBell]]:[]),
     ["/manager/settings","Cài đặt",FiSettings],
   ]},
 ];

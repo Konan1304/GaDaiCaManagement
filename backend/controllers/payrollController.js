@@ -14,12 +14,13 @@ async function managerBranch(pool,user){
   return result.recordset[0]?.branchId;
 }
 
+const payrollAttendanceIsTest=process.env.APP_ENV==="sandbox"?1:0;
 const attendanceCte=`
 WITH AttendancePairs AS (
   SELECT employee_id,COALESCE(work_date,CAST(check_in_time AS date)) AS work_date,
     check_in_time AS check_in,check_out_time AS check_out,worked_minutes
   FROM attendance_logs
-  WHERE check_in_time>=@start AND check_in_time<@end AND check_out_time IS NOT NULL AND ISNULL(is_test,0)=0
+  WHERE check_in_time>=@start AND check_in_time<@end AND check_out_time IS NOT NULL AND ISNULL(is_test,0)=${payrollAttendanceIsTest}
 ), WorkTotals AS (
   SELECT employee_id,COUNT(DISTINCT work_date) AS total_work_days,
     CAST(ROUND(SUM(COALESCE(worked_minutes,DATEDIFF(MINUTE,check_in,check_out)))/60.0,2) AS DECIMAL(10,2)) AS total_work_hours
@@ -47,10 +48,14 @@ async function list(req,res,next){try{
       pos.position_name AS positionName,b.branch_name AS branchName,
       COALESCE(w.total_work_days,0) AS totalWorkDays,COALESCE(w.total_work_hours,0) AS totalWorkHours,
       COALESCE(pr.hourly_rate,rate.hourly_rate,@defaultRate) AS hourlyRate,
-      COALESCE(pr.base_salary,ROUND(COALESCE(w.total_work_hours,0)*COALESCE(rate.hourly_rate,@defaultRate),0)) AS baseSalary,
+      CASE WHEN pr.status IN('confirmed','paid') THEN pr.base_salary
+        ELSE ROUND(COALESCE(w.total_work_hours,0)*COALESCE(pr.hourly_rate,rate.hourly_rate,@defaultRate),0) END AS baseSalary,
       COALESCE(pr.parking_allowance+pr.meal_allowance+pr.other_allowance+pr.bonus,0) AS totalAllowance,
       COALESCE(pr.uniform_deduction+pr.salary_advance+pr.other_deduction,0) AS totalDeduction,
-      COALESCE(pr.net_salary,ROUND(COALESCE(w.total_work_hours,0)*COALESCE(rate.hourly_rate,@defaultRate),0)) AS netSalary,
+      CASE WHEN pr.status IN('confirmed','paid') THEN pr.net_salary ELSE
+        ROUND(COALESCE(w.total_work_hours,0)*COALESCE(pr.hourly_rate,rate.hourly_rate,@defaultRate),0)
+        +COALESCE(pr.parking_allowance+pr.meal_allowance+pr.other_allowance+pr.bonus,0)
+        -COALESCE(pr.uniform_deduction+pr.salary_advance+pr.other_deduction,0) END AS netSalary,
       COALESCE(pr.status,'draft') AS status
     FROM employees e JOIN users u ON u.id=e.user_id JOIN positions pos ON pos.id=e.position_id JOIN branches b ON b.id=e.branch_id
     LEFT JOIN WorkTotals w ON w.employee_id=e.id
@@ -71,12 +76,16 @@ async function payrollDetail(pool,employeeId,month){
     SELECT e.id AS employeeId,e.employee_code AS employeeCode,u.full_name AS fullName,pos.position_name AS positionName,b.branch_name AS branchName,
       COALESCE(w.total_work_days,0) AS totalWorkDays,COALESCE(w.total_work_hours,0) AS totalWorkHours,
       COALESCE(pr.hourly_rate,rate.hourly_rate,@defaultRate) AS hourlyRate,
-      COALESCE(pr.base_salary,ROUND(COALESCE(w.total_work_hours,0)*COALESCE(rate.hourly_rate,@defaultRate),0)) AS baseSalary,
+      CASE WHEN pr.status IN('confirmed','paid') THEN pr.base_salary
+        ELSE ROUND(COALESCE(w.total_work_hours,0)*COALESCE(pr.hourly_rate,rate.hourly_rate,@defaultRate),0) END AS baseSalary,
       COALESCE(pr.parking_allowance,0) AS parkingAllowance,COALESCE(pr.meal_allowance,0) AS mealAllowance,
       COALESCE(pr.other_allowance,0) AS otherAllowance,COALESCE(pr.bonus,0) AS bonus,
       COALESCE(pr.uniform_deduction,0) AS uniformDeduction,COALESCE(pr.salary_advance,0) AS salaryAdvance,
       COALESCE(pr.other_deduction,0) AS otherDeduction,
-      COALESCE(pr.net_salary,ROUND(COALESCE(w.total_work_hours,0)*COALESCE(rate.hourly_rate,@defaultRate),0)) AS netSalary,
+      CASE WHEN pr.status IN('confirmed','paid') THEN pr.net_salary ELSE
+        ROUND(COALESCE(w.total_work_hours,0)*COALESCE(pr.hourly_rate,rate.hourly_rate,@defaultRate),0)
+        +COALESCE(pr.parking_allowance+pr.meal_allowance+pr.other_allowance+pr.bonus,0)
+        -COALESCE(pr.uniform_deduction+pr.salary_advance+pr.other_deduction,0) END AS netSalary,
       COALESCE(pr.status,'draft') AS status,pr.note
     FROM employees e JOIN users u ON u.id=e.user_id JOIN positions pos ON pos.id=e.position_id JOIN branches b ON b.id=e.branch_id
     LEFT JOIN WorkTotals w ON w.employee_id=e.id LEFT JOIN payrolls pr ON pr.employee_id=e.id AND pr.payroll_month=@month

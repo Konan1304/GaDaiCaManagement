@@ -1,5 +1,5 @@
 import {useEffect,useMemo,useRef,useState} from "react";
-import {FiCalendar,FiChevronDown,FiChevronLeft,FiChevronRight,FiClock,FiMapPin} from "react-icons/fi";
+import {FiCalendar,FiChevronDown,FiChevronLeft,FiChevronRight,FiClock,FiMapPin,FiUsers} from "react-icons/fi";
 import {employeeApi} from "../../api/services";
 import {dateKey,time} from "../../utils/employeeFormat";
 
@@ -95,6 +95,7 @@ export default function MySchedulePage(){
       <p><FiClock/><span>{time(item.startTime)} – {time(item.endTime)}</span></p>
       <p><FiMapPin/><span>Vị trí: <b>{item.workPosition||item.positionName}</b></span></p>
       <p><FiMapPin/><span>Chi nhánh: <b>{item.branchName}</b></span></p>
+      <div className="schedule-coworkers"><div className="schedule-coworkers-title"><FiUsers/><span>Làm cùng ca <b>{item.coworkers?.length||0} nhân viên</b></span></div>{item.coworkers?.length?<div className="schedule-coworker-list">{item.coworkers.map(person=><div className="schedule-coworker" key={person.employeeId}><span>{person.fullName?.split(" ").map(part=>part[0]).slice(-2).join("")||"NV"}</span><div><b>{person.fullName}</b><small>{person.positionName} · Ca {person.shiftCode} ({time(person.startTime)}–{time(person.endTime)})</small></div></div>)}</div>:<small className="schedule-no-coworker">Ca này chưa có nhân viên khác được xếp cùng.</small>}</div>
       {item.note&&<p className="schedule-note">{item.note}</p>}
      </div>
     </article>)}

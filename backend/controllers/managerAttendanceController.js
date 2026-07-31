@@ -3,8 +3,10 @@ const {sql,getPool}=require("../config/db");
 const fail=(res,status,message)=>res.status(status).json({success:false,message});
 const validDate=value=>/^\d{4}-\d{2}-\d{2}$/.test(String(value||""));
 const validDateTime=value=>/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?$/.test(String(value||""));
-const allowedStatuses=new Set(["not_checked_in","working","completed","late","early_leave","missing_checkout"]);
+const allowedStatuses=new Set(["not_checked_in","working","completed","late","early_leave","missing_checkout","absent"]);
 const allowedDataTypes=new Set(["all","real","test"]);
+const attendanceEnvironmentJoin=process.env.APP_ENV==="sandbox"?"al.is_test=1":"ISNULL(al.is_test,0)=0";
+const attendanceEnvironmentWhere=process.env.APP_ENV==="sandbox"?"es.is_test=1 AND al.is_test=1":"ISNULL(es.is_test,0)=0 AND ISNULL(al.is_test,0)=0";
 
 async function managerBranch(pool,user){
   if(user.role==="admin")return null;
@@ -28,13 +30,15 @@ const rowSql=`
     e.id AS employeeId,e.employee_code AS employeeCode,u.full_name AS fullName,
     p.id AS positionId,p.position_name AS positionName,b.id AS branchId,b.branch_name AS branchName,
     s.shift_code AS shiftCode,s.shift_name AS shiftName,
-    CONVERT(char(5),s.start_time,108) AS shiftStartTime,CONVERT(char(5),s.end_time,108) AS shiftEndTime,
+    CONVERT(char(5),COALESCE(es.start_time_override,s.start_time),108) AS shiftStartTime,CONVERT(char(5),COALESCE(es.end_time_override,s.end_time),108) AS shiftEndTime,
     CONVERT(char(19),al.check_in_time,126) AS checkInTime,
     CONVERT(char(19),al.check_out_time,126) AS checkOutTime,
     al.worked_minutes AS workedMinutes,ISNULL(al.late_minutes,0) AS lateMinutes,
     ISNULL(al.early_leave_minutes,0) AS earlyLeaveMinutes,
     CASE
       WHEN al.id IS NULL THEN 'not_checked_in'
+      WHEN al.status='absent' THEN 'absent'
+      WHEN al.status='missing_checkout' THEN 'missing_checkout'
       WHEN al.check_in_time IS NOT NULL AND al.check_out_time IS NULL
         AND es.work_date<CAST(SYSDATETIME() AS date) THEN 'missing_checkout'
       WHEN al.check_out_time IS NOT NULL THEN 'completed'
@@ -49,8 +53,7 @@ const rowSql=`
   JOIN positions p ON p.id=e.position_id
   JOIN branches b ON b.id=es.branch_id
   JOIN shifts s ON s.id=es.shift_id
-  LEFT JOIN attendance_logs al ON al.schedule_id=es.id AND al.employee_id=es.employee_id
-    AND al.check_in_time IS NOT NULL
+  LEFT JOIN attendance_logs al ON al.schedule_id=es.id AND al.employee_id=es.employee_id AND ${attendanceEnvironmentJoin}
   LEFT JOIN users editor ON editor.id=al.updated_by`;
 
 function bindFilters(request,query,scopeBranch){
@@ -61,7 +64,8 @@ function bindFilters(request,query,scopeBranch){
     "es.status<>'cancelled'",
     `EXISTS(SELECT 1 FROM schedule_registration_periods rp
       WHERE rp.branch_id=es.branch_id AND rp.status='published'
-        AND es.work_date BETWEEN rp.week_start_date AND rp.week_end_date)`
+        AND es.work_date BETWEEN rp.week_start_date AND rp.week_end_date)`,
+    process.env.APP_ENV==="sandbox"?"es.is_test=1 AND (al.id IS NULL OR al.is_test=1)":"ISNULL(es.is_test,0)=0 AND (al.id IS NULL OR ISNULL(al.is_test,0)=0)"
   ];
   const branchId=scopeBranch||Number(query.branchId||0);
   if(branchId){where.push("es.branch_id=@branchId");request.input("branchId",sql.Int,branchId)}
@@ -84,7 +88,8 @@ function statusCondition(status){
     completed:"al.check_out_time IS NOT NULL",
     late:"ISNULL(al.late_minutes,0)>0",
     early_leave:"ISNULL(al.early_leave_minutes,0)>0",
-    missing_checkout:"al.check_in_time IS NOT NULL AND al.check_out_time IS NULL AND es.work_date<CAST(SYSDATETIME() AS date)"
+    missing_checkout:"al.status='missing_checkout' OR (al.check_in_time IS NOT NULL AND al.check_out_time IS NULL AND es.work_date<CAST(SYSDATETIME() AS date))",
+    absent:"al.status='absent'"
   };
   return values[status]||null;
 }
@@ -107,13 +112,13 @@ async function list(req,res,next){try{
       SUM(CASE WHEN al.check_in_time IS NOT NULL THEN 1 ELSE 0 END) AS checkedIn,
       SUM(CASE WHEN al.check_out_time IS NOT NULL THEN 1 ELSE 0 END) AS completed,
       SUM(CASE WHEN al.id IS NULL THEN 1 ELSE 0 END) AS notCheckedIn,
-      SUM(CASE WHEN ISNULL(al.late_minutes,0)>0 OR
+      SUM(CASE WHEN al.status IN ('absent','missing_checkout') OR ISNULL(al.late_minutes,0)>0 OR
         (al.check_in_time IS NOT NULL AND al.check_out_time IS NULL AND es.work_date<CAST(SYSDATETIME() AS date))
         THEN 1 ELSE 0 END) AS attention
     FROM employee_schedules es
     JOIN employees e ON e.id=es.employee_id JOIN users u ON u.id=e.user_id
     JOIN positions p ON p.id=e.position_id JOIN branches b ON b.id=es.branch_id JOIN shifts s ON s.id=es.shift_id
-    LEFT JOIN attendance_logs al ON al.schedule_id=es.id AND al.employee_id=es.employee_id AND al.check_in_time IS NOT NULL
+    LEFT JOIN attendance_logs al ON al.schedule_id=es.id AND al.employee_id=es.employee_id AND ${attendanceEnvironmentJoin}
     WHERE ${where.join(" AND ")};
   `);
   const summary=result.recordsets[1][0]||{};
@@ -182,9 +187,9 @@ async function update(req,res,next){
     if(scope)request.input("branchId",sql.Int,scope);
     const current=await request.query(`
       SELECT al.id,al.employee_id AS employeeId,CONVERT(char(10),es.work_date,23) AS workDate,
-        es.is_test AS isTest,s.start_time AS startTime,s.end_time AS endTime
+        es.is_test AS isTest,COALESCE(es.start_time_override,s.start_time) AS startTime,COALESCE(es.end_time_override,s.end_time) AS endTime
       FROM attendance_logs al JOIN employee_schedules es ON es.id=al.schedule_id JOIN shifts s ON s.id=es.shift_id
-      WHERE al.id=@id${scope?" AND es.branch_id=@branchId":""}`);
+      WHERE al.id=@id AND ${attendanceEnvironmentWhere}${scope?" AND es.branch_id=@branchId":""}`);
     const row=current.recordset[0];
     if(!row){await transaction.rollback();started=false;return fail(res,404,"Không tìm thấy chấm công.")}
     const warning=await payrollWarning(transaction,row.employeeId,row.workDate);
@@ -194,16 +199,16 @@ async function update(req,res,next){
         UPDATE al SET check_in_time=@checkIn,check_out_time=@checkOut,
           attendance_time=@checkIn,worked_minutes=CASE WHEN @checkOut IS NULL THEN NULL
             ELSE (DATEDIFF(SECOND,@checkIn,@checkOut)+59)/60 END,
-          late_minutes=CASE WHEN @checkIn>DATEADD(SECOND,DATEDIFF(SECOND,CAST('00:00' AS time),s.start_time),CAST(es.work_date AS datetime2))
-            THEN DATEDIFF(MINUTE,DATEADD(SECOND,DATEDIFF(SECOND,CAST('00:00' AS time),s.start_time),CAST(es.work_date AS datetime2)),@checkIn) ELSE 0 END,
+          late_minutes=CASE WHEN @checkIn>DATEADD(SECOND,DATEDIFF(SECOND,CAST('00:00' AS time),COALESCE(es.start_time_override,s.start_time)),CAST(es.work_date AS datetime2))
+            THEN DATEDIFF(MINUTE,DATEADD(SECOND,DATEDIFF(SECOND,CAST('00:00' AS time),COALESCE(es.start_time_override,s.start_time)),CAST(es.work_date AS datetime2)),@checkIn) ELSE 0 END,
           early_leave_minutes=CASE WHEN @checkOut IS NOT NULL AND @checkOut<
-            DATEADD(day,CASE WHEN s.end_time<=s.start_time THEN 1 ELSE 0 END,DATEADD(SECOND,DATEDIFF(SECOND,CAST('00:00' AS time),s.end_time),CAST(es.work_date AS datetime2)))
-            THEN DATEDIFF(MINUTE,@checkOut,DATEADD(day,CASE WHEN s.end_time<=s.start_time THEN 1 ELSE 0 END,DATEADD(SECOND,DATEDIFF(SECOND,CAST('00:00' AS time),s.end_time),CAST(es.work_date AS datetime2)))) ELSE 0 END,
+            DATEADD(day,CASE WHEN COALESCE(es.end_time_override,s.end_time)<=COALESCE(es.start_time_override,s.start_time) THEN 1 ELSE 0 END,DATEADD(SECOND,DATEDIFF(SECOND,CAST('00:00' AS time),COALESCE(es.end_time_override,s.end_time)),CAST(es.work_date AS datetime2)))
+            THEN DATEDIFF(MINUTE,@checkOut,DATEADD(day,CASE WHEN COALESCE(es.end_time_override,s.end_time)<=COALESCE(es.start_time_override,s.start_time) THEN 1 ELSE 0 END,DATEADD(SECOND,DATEDIFF(SECOND,CAST('00:00' AS time),COALESCE(es.end_time_override,s.end_time)),CAST(es.work_date AS datetime2)))) ELSE 0 END,
           status=CASE WHEN @checkOut IS NULL THEN 'working' ELSE 'completed' END,
           adjustment_reason=@reason,updated_by=@userId,updated_at=SYSDATETIME()
         OUTPUT INSERTED.id
         FROM attendance_logs al JOIN employee_schedules es ON es.id=al.schedule_id JOIN shifts s ON s.id=es.shift_id
-        WHERE al.id=@id`);
+        WHERE al.id=@id AND ${attendanceEnvironmentWhere}`);
     await transaction.commit();started=false;
     res.json({success:true,message:"Cập nhật chấm công thành công.",data:{attendanceId:result.recordset[0].id,payrollLocked:Boolean(warning),payrollStatus:warning}});
   }catch(error){if(started)await transaction.rollback().catch(()=>{});next(error)}
@@ -224,7 +229,7 @@ async function manual(req,res,next){
     if(scope)request.input("branchId",sql.Int,scope);
     const schedule=await request.query(`
       SELECT es.id,es.employee_id AS employeeId,es.branch_id AS branchId,CONVERT(char(10),es.work_date,23) AS workDate,
-        es.is_test AS isTest,s.start_time AS startTime,s.end_time AS endTime
+        es.is_test AS isTest,COALESCE(es.start_time_override,s.start_time) AS startTime,COALESCE(es.end_time_override,s.end_time) AS endTime
       FROM employee_schedules es JOIN shifts s ON s.id=es.shift_id
       WHERE es.id=@scheduleId AND es.status<>'cancelled'${scope?" AND es.branch_id=@branchId":""}
         AND EXISTS(SELECT 1 FROM schedule_registration_periods rp WHERE rp.branch_id=es.branch_id
@@ -249,9 +254,9 @@ async function manual(req,res,next){
           CASE WHEN @checkOut IS NOT NULL AND @checkOut<shiftEnd THEN DATEDIFF(MINUTE,@checkOut,shiftEnd) ELSE 0 END,
           CASE WHEN @checkOut IS NULL THEN 'working' ELSE 'completed' END,'manual',@reason,@isTest,@reason,@userId,SYSDATETIME(),SYSDATETIME()
         FROM (
-          SELECT DATEADD(SECOND,DATEDIFF(SECOND,CAST('00:00' AS time),s.start_time),CAST(es.work_date AS datetime2)) shiftStart,
-            DATEADD(day,CASE WHEN s.end_time<=s.start_time THEN 1 ELSE 0 END,
-              DATEADD(SECOND,DATEDIFF(SECOND,CAST('00:00' AS time),s.end_time),CAST(es.work_date AS datetime2))) shiftEnd
+          SELECT DATEADD(SECOND,DATEDIFF(SECOND,CAST('00:00' AS time),COALESCE(es.start_time_override,s.start_time)),CAST(es.work_date AS datetime2)) shiftStart,
+            DATEADD(day,CASE WHEN COALESCE(es.end_time_override,s.end_time)<=COALESCE(es.start_time_override,s.start_time) THEN 1 ELSE 0 END,
+              DATEADD(SECOND,DATEDIFF(SECOND,CAST('00:00' AS time),COALESCE(es.end_time_override,s.end_time)),CAST(es.work_date AS datetime2))) shiftEnd
           FROM employee_schedules es JOIN shifts s ON s.id=es.shift_id WHERE es.id=@scheduleId
         ) times`);
     await transaction.commit();started=false;

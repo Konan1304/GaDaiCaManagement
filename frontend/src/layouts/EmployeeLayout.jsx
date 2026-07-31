@@ -11,6 +11,7 @@ const nav=[
   ["/employee/attendance","Chấm công",FiClock],
   ["/employee/profile","Hồ sơ",FiUser],
 ];
+const isSandbox=import.meta.env.VITE_APP_ENV==="sandbox";
 const titles={schedule:"Lịch làm việc",attendance:"Chấm công",shift:"Ca làm",payroll:"Lương của tôi",expenses:"Chi phí","shift-closing":"Đóng ca","shift-report":"Báo cáo ca","shift-registration":"Đăng ký ca","leave-request":"Xin nghỉ",notifications:"Thông báo",profile:"Hồ sơ"};
 
 export default function EmployeeLayout(){
@@ -26,7 +27,7 @@ export default function EmployeeLayout(){
         <button className="emp-icon-button" onClick={()=>navigate(-1)} aria-label="Quay lại"><FiChevronLeft/></button>
         <h1>{titles[page]||"Gà Đại Ca"}</h1><span className="emp-header-spacer"/>
       </>}
-      <button className="emp-icon-button emp-bell" onClick={()=>navigate("/employee/notifications")} aria-label="Thông báo"><FiBell/></button>
+      <button className="emp-icon-button emp-bell" onClick={()=>navigate(isSandbox?"/employee/notification-center":"/employee/notifications")} aria-label="Thông báo"><FiBell/></button>
     </header>
     <main className="emp-content"><Outlet context={{profile,loading,logout}}/></main>
     <nav className="emp-bottom-nav">{nav.map(([to,label,Icon])=><NavLink key={to} to={to}><Icon/><span>{label}</span></NavLink>)}</nav>

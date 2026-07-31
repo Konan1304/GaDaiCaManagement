@@ -1,4 +1,5 @@
-require("dotenv").config();
+const { loadEnvironment } = require("./config/env");
+loadEnvironment();
 const express = require("express");
 const cors = require("cors");
 const { connectDatabase, getPool } = require("./config/db");
@@ -7,8 +8,14 @@ const { createCrudRouter } = require("./routes/crudRoutes");
 
 const app = express();
 app.disable("x-powered-by");
-app.use(cors({ origin:true, credentials:true }));
+const allowedOrigins = process.env.CORS_ORIGIN.split(",").map((value) => value.trim()).filter(Boolean);
+app.use(cors({ origin(origin, callback) {
+  if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+  return callback(new Error(`CORS từ chối origin: ${origin}`));
+}, credentials:true }));
 app.use(express.json({ limit:"1mb" }));
+
+app.get("/api/environment", async (req,res,next)=>{try{const pool=await getPool();const result=await pool.request().query(`SELECT DB_NAME() AS databaseName,SYSDATETIME() AS serverTime${process.env.APP_ENV==="sandbox"?",(SELECT business_datetime FROM dbo.sandbox_clock WHERE id=1) AS businessDateTime":""}`);res.json({success:true,appEnv:process.env.APP_ENV,databaseName:result.recordset[0].databaseName,serverTime:result.recordset[0].serverTime,businessDateTime:result.recordset[0].businessDateTime||null,sandboxInitialDateTime:process.env.SANDBOX_INITIAL_DATETIME||null,scheduleTestMode:process.env.APP_ENV==="sandbox"&&String(process.env.ENABLE_SCHEDULE_TEST_MODE).toLowerCase()==="true"})}catch(error){next(error)}});
 
 app.get("/api/health", async (req,res,next)=>{try{const pool=await getPool();await pool.request().query("SELECT 1 AS ok");res.json({success:true,message:"Gà Đại Ca API đang hoạt động",database:"connected"})}catch(error){next(error)}});
 app.use("/api/auth", require("./routes/authRoutes"));
@@ -22,6 +29,14 @@ app.use("/api/imports", require("./routes/importRoutes"));
 app.use("/api/dashboard", require("./routes/dashboardRoutes"));
 app.use("/api/employee", require("./routes/employeeOperationsRoutes"));
 app.use("/api/manager", require("./routes/employeeRoutes"));
+if(process.env.APP_ENV==="sandbox")app.use("/api/sandbox/attendance-test",require("./routes/sandboxAttendanceRoutes"));
+if(process.env.APP_ENV==="sandbox"){
+  app.use("/api/operations",require("./routes/shiftOperationsRoutes"));
+  app.use("/api/manager/operations",require("./routes/managerOperationsRoutes"));
+  app.use("/api/chat",require("./routes/chatRoutes"));
+  app.use("/api/notifications",require("./routes/notificationCenterRoutes"));
+  require("./services/operationOutboxWorker").start();
+}
 
 // CRUD theo tên nghiệp vụ; model được introspect trực tiếp từ SQL Server.
 const crudMappings = {

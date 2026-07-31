@@ -17,6 +17,7 @@ export default function LoginPage(){
   finally{setLoading(false)}
  }
  return <div className="login-page">
+  {import.meta.env.VITE_APP_ENV==="sandbox"&&<div className="sandbox-login-note">Đăng nhập môi trường kiểm thử riêng · Không sử dụng tài khoản thật</div>}
   <section className="login-visual"><div className="visual-brand"><span className="brand-mark">GĐC</span><b>GÀ ĐẠI CA</b></div><div className="visual-copy"><span>Quản lý thông minh · Vận hành dễ dàng</span><h1>Món ngon trọn vị,<br/>quản lý trọn tâm.</h1><p>Một nền tảng duy nhất để quản lý nhân sự, kho hàng và doanh thu hiệu quả.</p></div><img src={hero} alt="Món gà rán Gà Đại Ca"/></section>
   <section className="login-panel"><form className="login-card" onSubmit={handleSubmit}><div className="login-logo"><span className="brand-mark">GĐC</span><div><b>GÀ ĐẠI CA</b><small>MANAGEMENT</small></div></div><div className="login-heading"><h2>Đăng nhập hệ thống</h2><p>Chào mừng bạn trở lại! Vui lòng nhập thông tin.</p></div>{error&&<div className="login-error"><FiAlertCircle/>{error}</div>}
    <label>Email<div className="input-wrap"><FiMail/><input type="email" placeholder="name@daiga.vn" value={email} onChange={event=>{setEmail(event.target.value);setError("")}} autoComplete="email" required/></div></label>

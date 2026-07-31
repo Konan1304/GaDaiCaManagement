@@ -1,0 +1,4 @@
+process.env.APP_ENV = "sandbox";
+require("../config/env").loadEnvironment("sandbox");
+const { connect, verifySandbox } = require("./dbTools");
+(async()=>{const pool=await connect();try{const db=await verifySandbox(pool);const result=await pool.request().query(`SELECT DB_NAME() database_name,(SELECT COUNT(*) FROM dbo.users WHERE is_test=1) test_users,(SELECT COUNT(*) FROM dbo.employees WHERE is_test=1) test_employees,(SELECT COUNT(*) FROM dbo.schema_migrations) migrations,(SELECT setting_value FROM dbo.system_settings WHERE setting_key='sandbox_initial_datetime') initial_datetime`);console.table(result.recordset);console.log(`XÁC MINH AN TOÀN: APP_ENV=sandbox, database=${db}`)}finally{await pool.close()}})().catch((error)=>{console.error("Kiểm tra Sandbox thất bại:",error.message);process.exit(1)});

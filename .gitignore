@@ -1,5 +1,11 @@
 database/backups/
 backend/server-output.log
 backend/server-error.log
+backend/uploads/
 frontend/vite-output.log
 frontend/vite-error.log
+backend/.env.production
+backend/.env.sandbox
+frontend/.env.production
+frontend/.env.sandbox
+frontend/dist-sandbox/

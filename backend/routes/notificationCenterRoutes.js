@@ -1,0 +1,1 @@
+const r=require('express').Router(),auth=require('../middleware/authMiddleware'),roles=require('../middleware/roleMiddleware'),c=require('../controllers/notificationCenterController');r.use(auth,roles('employee','manager','admin'));r.get('/',c.list);r.put('/read-all',c.all);r.put('/:id/read',c.read);module.exports=r;

@@ -1,74 +1,26 @@
 import {useEffect,useMemo,useState} from "react";
 import {useNavigate,useParams} from "react-router-dom";
 import {scheduleRegistrationApi} from "../../api/services";
-
-const dayNames=["CN","T2","T3","T4","T5","T6","T7"];
-const dateKey=value=>{
-  if(!(value instanceof Date))return String(value||"").slice(0,10);
-  const y=value.getFullYear(),m=String(value.getMonth()+1).padStart(2,"0"),d=String(value.getDate()).padStart(2,"0");
-  return `${y}-${m}-${d}`;
+import {parseShiftDisplayCode} from "../../utils/shiftCode";
+const iso=v=>v instanceof Date?`${v.getFullYear()}-${String(v.getMonth()+1).padStart(2,"0")}-${String(v.getDate()).padStart(2,"0")}`:String(v||"").slice(0,10);
+const range=(start,end)=>{const a=new Date(`${iso(start)}T00:00:00`),b=new Date(`${iso(end)}T00:00:00`);return Array.from({length:Math.floor((b-a)/864e5)+1},(_,i)=>{const d=new Date(a);d.setDate(a.getDate()+i);return d})};
+const days=["CN","T2","T3","T4","T5","T6","T7"],clock=value=>{
+ const text=String(value||"");
+ const isoMatch=text.match(/T(\d{2}):(\d{2})/),timeMatch=text.match(/^(\d{2}):(\d{2})/);
+ if(isoMatch)return `${isoMatch[1]}:${isoMatch[2]}`;
+ if(timeMatch)return `${timeMatch[1]}:${timeMatch[2]}`;
+ return "";
 };
-const dateRange=(startValue,endValue)=>{
-  const start=new Date(`${dateKey(startValue)}T00:00:00`),end=new Date(`${dateKey(endValue)}T00:00:00`);
-  const length=Math.floor((end-start)/864e5)+1;
-  return Array.from({length},(_,index)=>{const date=new Date(start);date.setDate(start.getDate()+index);return date});
-};
-
 export default function ScheduleBuilderPage(){
-  const {periodId}=useParams(),navigate=useNavigate();
-  const [data,setData]=useState(null),[assignments,setAssignments]=useState({});
-  const [message,setMessage]=useState(""),[error,setError]=useState(""),[saving,setSaving]=useState(false);
-
-  useEffect(()=>{
-    scheduleRegistrationApi.builder(periodId).then(response=>{
-      const payload=response.data,registrationMap={},draftMap={};
-      payload.registrations.forEach(item=>registrationMap[`${item.employeeId}_${item.workDate}`]=item.shiftCode);
-      payload.draftSchedules.forEach(item=>draftMap[`${item.employeeId}_${item.workDate}`]=item.shiftCode);
-      setData({...payload,registrationMap});
-      setAssignments(Object.keys(draftMap).length?draftMap:registrationMap);
-    }).catch(e=>setError(e.response?.data?.message||"Không tải được dữ liệu xếp lịch"));
-  },[periodId]);
-
-  const dates=useMemo(()=>data?dateRange(data.period.startDate,data.period.endDate):[],[data]);
-  const schedules=()=>Object.entries(assignments).filter(([,shiftCode])=>shiftCode).map(([key,shiftCode])=>{
-    const separator=key.indexOf("_"),employeeId=Number(key.slice(0,separator)),workDate=key.slice(separator+1);
-    const employee=data.employees.find(item=>Number(item.employeeId)===employeeId);
-    return {employeeId,workDate,shiftCode,workPosition:employee?.positionName||"",note:""};
-  });
-  const run=async publish=>{
-    setSaving(true);setMessage("");setError("");
-    try{
-      let response;
-      if(publish){
-        await scheduleRegistrationApi.saveBuilder(periodId,schedules());
-        response=await scheduleRegistrationApi.publishBuilder(periodId);
-      }else response=await scheduleRegistrationApi.saveBuilder(periodId,schedules());
-      setMessage(publish?`${response.message}. Nhân viên đã có thể xem lịch làm.`:response.message);
-      if(publish)setData(value=>({...value,period:{...value.period,status:"published"},draftSchedules:schedules()}));
-    }catch(e){setError(e.response?.data?.message||"Không thể lưu lịch")}
-    finally{setSaving(false)}
-  };
-
-  if(!data)return <section className="card employee-table-empty">Đang tải trình xếp lịch...</section>;
-  return <section className="card registration-sheet">
-    <div className="section-title"><div><h2>Xếp lịch chính thức</h2><p>{data.period.title} · Lịch chỉ hiện cho nhân viên sau khi được công bố.</p></div><div>
-      <button className="btn btn-light" onClick={()=>navigate(-1)}>Quay lại</button>{" "}
-      <button className="btn btn-light" disabled={saving} onClick={()=>run(false)}>Lưu bản nháp</button>{" "}
-      <button className="btn btn-primary" disabled={saving} onClick={()=>run(true)}>Lưu &amp; Công bố</button>
-    </div></div>
-    {message&&<div className="manager-form-success">{message}</div>}
-    {error&&<div className="manager-form-error">{error}</div>}
-    <div className="schedule-sheet-wrap"><table className="schedule-sheet builder"><thead><tr><th>Nhân viên</th>
-      {dates.map(date=><th key={dateKey(date)}>{dayNames[date.getDay()]}<small>{date.toLocaleDateString("vi-VN",{day:"2-digit",month:"2-digit"})}</small></th>)}
-    </tr></thead><tbody>{data.employees.map(employee=><tr key={employee.employeeId}><th><b>{employee.fullName}</b><small>{employee.positionName}</small></th>
-      {dates.map(date=>{const key=`${employee.employeeId}_${dateKey(date)}`,registered=data.registrationMap[key]||"",assigned=assignments[key]||"";
-        return <td className={assigned!==registered&&registered?"schedule-mismatch":""} key={key}>
-          <select value={assigned} onChange={event=>setAssignments(value=>({...value,[key]:event.target.value}))}>
-            <option value="">Nghỉ</option>{data.shifts.map(shift=><option key={shift.shiftId} value={shift.shiftCode}>{shift.shiftCode}</option>)}
-          </select>
-          <small>ĐK: {registered||"—"}</small>
-          <small>Xếp: {assigned||"Nghỉ"}</small>
-        </td>})}
-    </tr>)}</tbody></table></div>
-  </section>;
+ const {periodId}=useParams(),navigate=useNavigate(),[data,setData]=useState(null),[assignments,setAssignments]=useState({}),[selectedEmployeeId,setSelectedEmployeeId]=useState(null),[message,setMessage]=useState(""),[error,setError]=useState(""),[saving,setSaving]=useState(false);
+ useEffect(()=>{scheduleRegistrationApi.builder(periodId).then(({data:p})=>{const registrationMap={},draft={};p.registrations.forEach(x=>registrationMap[`${x.employeeId}_${x.workDate}`]=x.shiftCode);p.draftSchedules.forEach(x=>draft[`${x.employeeId}_${x.workDate}`]={shiftCode:x.shiftCode,displayCode:x.displayCode||x.shiftCode,startTime:clock(x.startTime),endTime:clock(x.endTime),workPosition:x.workPosition||"",note:x.note||""});setData({...p,registrationMap});setAssignments(draft)}).catch(e=>setError(e.response?.data?.message||"Không tải được dữ liệu xếp lịch"))},[periodId]);
+ const dates=useMemo(()=>data?range(data.period.startDate,data.period.endDate):[],[data]);
+ const change=(key,field,value)=>setAssignments(old=>({...old,[key]:{...(old[key]||{}),[field]:value}}));
+ const changeDisplayCode=(key,value)=>setAssignments(old=>{const current=old[key]||{},parsed=parseShiftDisplayCode(value);return {...old,[key]:{...current,displayCode:value.toUpperCase(),...(parsed?{shiftCode:parsed.baseShiftCode,startTime:parsed.startTime,endTime:parsed.endTime,codeError:"",autoCalculated:true}:{codeError:"Mã ca không hợp lệ. Ví dụ: A, A-1, A+1, B+1, P3-1.",autoCalculated:false})}}});
+ const choose=(key,code)=>{if(!code)return setAssignments(old=>{const next={...old};delete next[key];return next});const shift=data.shifts.find(x=>x.shiftCode===code);setAssignments(old=>({...old,[key]:{...(old[key]||{}),shiftCode:code,displayCode:code,startTime:clock(shift.startTime),endTime:clock(shift.endTime)}}))};
+ const schedules=()=>Object.entries(assignments).filter(([,x])=>x.shiftCode).map(([key,x])=>{const split=key.indexOf("_"),employeeId=Number(key.slice(0,split)),workDate=key.slice(split+1),employee=data.employees.find(e=>Number(e.employeeId)===employeeId);return {...x,employeeId,workDate,workPosition:x.workPosition||employee?.positionName||"",note:x.note||""}});
+ const run=async publish=>{setSaving(true);setError("");setMessage("");try{const invalid=Object.values(assignments).find(item=>item.codeError);if(invalid)throw new Error(invalid.codeError);await scheduleRegistrationApi.saveBuilder(periodId,schedules());if(publish){const r=await scheduleRegistrationApi.publishBuilder(periodId);setMessage(`${r.message}. Những ngày không được xếp ca sẽ được tính là ngày nghỉ.`)}else setMessage("Đã lưu bản nháp xếp lịch.")}catch(e){setError(e.response?.data?.message||e.message||"Không thể lưu lịch")}finally{setSaving(false)}};
+ if(!data)return <section className="card employee-table-empty">Đang tải trình xếp lịch...</section>;
+ return <section className="card registration-sheet"><div className="section-title"><div><h2>Xếp lịch chính thức</h2><p>{data.period.title} · Nguyện vọng được giữ riêng, lịch chỉ hiện sau khi công bố.</p></div><div><button className="btn btn-light" onClick={()=>navigate(-1)}>Quay lại</button>{" "}<button className="btn btn-light" disabled={saving} onClick={()=>run(false)}>Lưu bản nháp</button>{" "}<button className="btn btn-primary" disabled={saving} onClick={()=>run(true)}>Lưu & Công bố</button></div></div>{message&&<div className="manager-form-success">{message}</div>}{error&&<div className="manager-form-error">{error}</div>}
+ <div className="schedule-sheet-wrap"><table className="schedule-sheet builder custom-builder"><thead><tr><th>Nhân viên</th>{dates.map(d=><th key={iso(d)}>{days[d.getDay()]}<small>{d.toLocaleDateString("vi-VN",{day:"2-digit",month:"2-digit"})}</small></th>)}</tr></thead><tbody>{data.employees.map(e=>{const selected=Number(selectedEmployeeId)===Number(e.employeeId);return <tr key={e.employeeId} className={selected?"builder-row-selected":""}><th className="builder-employee-cell" role="button" tabIndex="0" aria-pressed={selected} title="Bấm để đánh dấu dòng nhân viên" onClick={()=>setSelectedEmployeeId(old=>Number(old)===Number(e.employeeId)?null:e.employeeId)} onKeyDown={event=>{if(event.key==="Enter"||event.key===" "){event.preventDefault();setSelectedEmployeeId(old=>Number(old)===Number(e.employeeId)?null:e.employeeId)}}}><b>{e.fullName}</b><small>{e.positionName}</small></th>{dates.map(d=>{const key=`${e.employeeId}_${iso(d)}`,pref=data.registrationMap[key]||"",value=assignments[key]||{};return <td key={key} className={`${pref==="FULL"?"preference-full":pref==="OFF"?"preference-off":""} ${value.codeError?"shift-code-invalid":""}`}><small className="builder-preference">ĐK: {pref==="OFF"?"Nghỉ":pref||"—"}</small><select value={value.shiftCode||""} onChange={event=>choose(key,event.target.value)}><option value="">Nghỉ / chưa xếp</option>{data.shifts.map(s=><option key={s.shiftId} value={s.shiftCode}>{s.shiftCode}</option>)}</select>{value.shiftCode&&<div className="custom-shift-fields"><input aria-label="Mã hiển thị" value={value.displayCode||""} onChange={ev=>changeDisplayCode(key,ev.target.value)}/><span><input type="time" value={value.startTime||""} onChange={ev=>change(key,"startTime",ev.target.value)}/><input type="time" value={value.endTime||""} onChange={ev=>change(key,"endTime",ev.target.value)}/></span>{value.codeError&&<small className="shift-code-error">{value.codeError}</small>} {!value.codeError&&value.displayCode&&<strong className="shift-time-preview">{value.displayCode}<br/>{value.startTime}–{value.endTime}</strong>}</div>}</td>})}</tr>})}</tbody></table></div><div className="registration-choice-note">FULL chỉ là nguyện vọng rảnh cả ngày. Trước khi công bố phải chọn ca gốc và lưu giờ bắt đầu/kết thúc thật.</div></section>
 }
