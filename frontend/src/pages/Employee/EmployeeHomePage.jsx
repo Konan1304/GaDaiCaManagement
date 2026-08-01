@@ -3,7 +3,12 @@ import {Link,useOutletContext} from "react-router-dom";
 import {FiBell,FiCalendar,FiClipboard,FiClock,FiDollarSign,FiFileText,FiLogOut,FiRefreshCw,FiPlusCircle} from "react-icons/fi";
 import {employeeApi} from "../../api/services";
 import {dateKey,shortDate,time} from "../../utils/employeeFormat";
-const actions=[["/employee/payroll","Lương của tôi",FiDollarSign],["/employee/shift-registration","Đăng ký lịch làm",FiPlusCircle],["/employee/schedule","Lịch làm",FiCalendar],["/employee/attendance","Chấm công",FiClock],["/employee/shift","Mở ca",FiRefreshCw],["/employee/shift-closing","Đóng ca",FiLogOut],["/employee/shift-report","Báo cáo ca",FiFileText],["/employee/expenses","Chi phí",FiDollarSign],["/employee/leave-request","Xin nghỉ",FiClipboard],["/employee/notifications","Thông báo",FiBell]];
+const isSandbox=import.meta.env.VITE_APP_ENV==="sandbox";
+const commonActions=[["/employee/payroll","Lương của tôi",FiDollarSign],["/employee/shift-registration","Đăng ký lịch làm",FiPlusCircle],["/employee/schedule","Lịch làm",FiCalendar],["/employee/attendance","Chấm công",FiClock]];
+const operationActions=isSandbox
+ ? [["/employee/shift","Báo cáo ca",FiFileText]]
+ : [["/employee/shift","Mở ca",FiRefreshCw],["/employee/shift-closing","Đóng ca",FiLogOut],["/employee/shift-report","Báo cáo ca",FiFileText]];
+const actions=[...commonActions,...operationActions,["/employee/expenses","Chi phí",FiDollarSign],["/employee/leave-request","Xin nghỉ",FiClipboard],["/employee/notifications","Thông báo",FiBell]];
 export default function EmployeeHomePage(){const {profile}=useOutletContext(),[shift,setShift]=useState(null),[schedules,setSchedules]=useState([]),[notices,setNotices]=useState([]),[registration,setRegistration]=useState(null),[error,setError]=useState("");
  useEffect(()=>{const now=new Date(),from=new Date(now);from.setDate(now.getDate()-((now.getDay()+6)%7));const to=new Date(from);to.setDate(from.getDate()+6);Promise.all([employeeApi.attendanceToday(),employeeApi.schedules(dateKey(from),dateKey(to)),employeeApi.notifications(),employeeApi.currentShiftRegistration()]).then(([a,b,c,d])=>{setShift(a.data?.schedule?{...a.data.schedule,...a.data.employee,attendance:a.data.attendance}:null);setSchedules(b.data||[]);setNotices((c.data||[]).slice(0,3));setRegistration(d.data)}).catch(e=>setError(e.response?.data?.message||"Không tải được dữ liệu"))},[]);
  const hours=useMemo(()=>schedules.reduce((sum,x)=>{const [sh,sm]=time(x.startTime).split(":").map(Number),[eh,em]=time(x.endTime).split(":").map(Number);return sum+Math.max(0,(eh*60+em-sh*60-sm)/60)},0),[schedules]);

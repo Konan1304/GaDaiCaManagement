@@ -22,7 +22,7 @@ const menuGroups=[
     ["/manager/suppliers","Nhà cung cấp",FiPackage],
   ]},
   {title:"QUẢN LÝ CỬA HÀNG",items:[
-    ...(isSandbox?[["/manager/operations","Vận hành ca",FiClock],["/manager/operations/dashboard","Dashboard vận hành",FiGrid],["/manager/chat","Chat nội bộ",FiMessageCircle]]:[]),
+    ...(isSandbox?[["/manager/operations/dashboard","Báo cáo ca",FiClipboard],["/manager/chat","Chat nội bộ",FiMessageCircle]]:[]),
     ["/manager/reports","Báo cáo",FiBarChart2],
   ]},
   {title:"HỆ THỐNG",items:[
@@ -39,6 +39,6 @@ export default function Sidebar({open,onClose,onLogout,user}){
       <h2>{group.title}</h2>
       <div>{group.items.map(([to,label,Icon])=><NavLink key={to} to={to} onClick={onClose} className={({isActive})=>`nav-link ${isActive?"active":""}`}><Icon/>{label}</NavLink>)}</div>
     </section>)}</nav>
-    <div className="sidebar-user"><div className="avatar admin-brand-avatar"><img src="/admin-avatar.png" alt="Gà Đại Ca"/></div><div><strong>{user?.name||"Quốc Anh"}</strong><small>{user?.position||"Quản lý cửa hàng"}</small></div><button className="sidebar-logout" title="Đăng xuất" onClick={onLogout}><FiLogOut/></button></div>
+    <div className="sidebar-user"><div className="avatar admin-brand-avatar"><img src="/admin-avatar.png" alt="Gà Đại Ca"/></div><div><strong>{user?.name||"Quốc Anh"}</strong><small>{user?.position||"Quản lý cửa hàng"}</small></div><NavLink className="sidebar-logout" title="Chấm công cá nhân" aria-label="Chấm công cá nhân" to="/employee/attendance" onClick={onClose}><FiClock/></NavLink><button className="sidebar-logout" title="Đăng xuất" onClick={onLogout}><FiLogOut/></button></div>
   </aside>;
 }

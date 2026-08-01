@@ -135,7 +135,9 @@ async function options(req,res,next){try{
   const request=scope.pool.request(),condition=scope.branchId?"WHERE b.id=@branchId":"";
   if(scope.branchId)request.input("branchId",sql.Int,scope.branchId);
   const result=await request.query(`
-    SELECT b.id AS branchId,b.branch_name AS branchName FROM branches b ${condition} ORDER BY b.branch_name;
+    SELECT b.id AS branchId,b.branch_code AS branchCode,b.branch_name AS branchName,b.status AS branchStatus,
+      (SELECT COUNT(*) FROM employees e WHERE e.branch_id=b.id AND e.status='working') AS employeeCount
+      FROM branches b ${condition} ORDER BY b.branch_name;
     SELECT DISTINCT e.id AS employeeId,e.employee_code AS employeeCode,u.full_name AS fullName,e.branch_id AS branchId
       FROM employees e JOIN users u ON u.id=e.user_id ${scope.branchId?"WHERE e.branch_id=@branchId":""} ORDER BY u.full_name;
     SELECT id AS positionId,position_name AS positionName FROM positions ORDER BY position_name;`);

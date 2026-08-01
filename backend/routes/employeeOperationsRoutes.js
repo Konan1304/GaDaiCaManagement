@@ -5,7 +5,9 @@ const c=require("../controllers/employeeOperationsController");
 const registration=require("../controllers/scheduleRegistrationController");
 const payroll=require("../controllers/payrollController");
 const oneShiftPerDay=(req,res,next)=>{const list=Array.isArray(req.body.registrations)?req.body.registrations:[],dates=list.map(x=>x.workDate);if(new Set(dates).size!==dates.length)return res.status(400).json({success:false,message:"Mỗi ngày chỉ được đăng ký tối đa một ca"});next()};
-router.use(authenticate,allowRoles("employee"));
+// Managers/admins may also have an employee profile and must clock in/out for
+// their own published schedule. Controllers still resolve employee_id from JWT.
+router.use(authenticate,allowRoles("employee","manager","admin"));
 router.get("/payroll",payroll.mine);
 router.get("/schedules",c.mySchedules);
 router.get("/schedules/me",c.mySchedules);

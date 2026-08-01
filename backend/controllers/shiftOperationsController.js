@@ -14,8 +14,17 @@ const selectSession=`SELECT ss.id AS shiftSessionId,ss.branch_id AS branchId,b.b
 async function current(req,res,next){try{
  const pool=await getPool(),clock=await businessNow(pool),employee=await employeeFromJwt(pool,req.user.userId);
  if(!employee?.employeeId)return fail(res,404,"Không tìm thấy hồ sơ nhân viên");
- const sessions=await pool.request().input("branchId",sql.Int,employee.branchId).input("date",sql.Date,clock.businessDate).query(`${selectSession} WHERE ss.branch_id=@branchId AND ss.business_date=@date AND ss.operation_shift_code IS NOT NULL ORDER BY CASE ss.operation_shift_code WHEN 'morning' THEN 1 ELSE 2 END; SELECT a.operation_shift_code AS operationShift,a.employee_id AS employeeId,u.full_name AS name,a.assignment_role AS assignmentRole FROM operation_shift_assignments a JOIN employees e ON e.id=a.employee_id JOIN users u ON u.id=e.user_id WHERE a.branch_id=@branchId AND a.business_date=@date AND a.status='assigned' AND a.is_test=1`);
- const cards=[];for(const operationShift of ["morning","evening"]){const state=await eligibility(pool,{userId:req.user.userId,businessDate:clock.businessDate,operationShift}),session=sessions.recordsets[0].find(x=>x.operationShift===operationShift)||null;cards.push({operationShift,session,eligibility:{allowed:state.allowed,reasons:state.reasons},leader:session?{employeeId:session.leaderEmployeeId,name:session.leaderName,role:"reporter"}:null})}
+ const sessions=await pool.request().input("branchId",sql.Int,employee.branchId).input("date",sql.Date,clock.businessDate).query(`${selectSession} WHERE ss.branch_id=@branchId AND ss.business_date=@date AND ss.operation_shift_code IS NOT NULL ORDER BY CASE ss.operation_shift_code WHEN 'morning' THEN 1 ELSE 2 END;
+ SELECT ss.id AS shiftSessionId,CONVERT(char(10),ss.business_date,23) AS businessDate,ss.operation_shift_code AS operationShift,
+   u.full_name AS reporterName,r.total_revenue AS totalRevenue,r.cash_revenue AS cashRevenue,r.grab_revenue AS grabRevenue,
+   r.shopeefood_revenue AS shopeefoodRevenue,r.be_revenue AS beRevenue,r.mpos_revenue AS mposRevenue,r.xanh_sm_revenue AS xanhSmRevenue,
+   r.actual_cash AS actualCash,r.difference_amount AS differenceAmount,r.cash_to_deposit AS cashToDeposit,r.note,r.submitted_at AS submittedAt
+ FROM shift_sessions ss JOIN shift_closing_reports r ON r.shift_session_id=ss.id AND r.is_test=1
+ LEFT JOIN employees e ON e.id=ss.leader_employee_id LEFT JOIN users u ON u.id=e.user_id
+ WHERE ss.branch_id=@branchId AND ss.is_test=1 AND r.status='submitted' AND
+   ((ss.operation_shift_code='morning' AND ss.business_date=@date) OR
+    (ss.operation_shift_code='evening' AND ss.business_date=DATEADD(day,-1,@date)))`);
+ const cards=[];for(const operationShift of ["morning","evening"]){const state=await eligibility(pool,{userId:req.user.userId,businessDate:clock.businessDate,operationShift}),session=sessions.recordsets[0].find(x=>x.operationShift===operationShift)||null,sourceOperation=operationShift==="morning"?"evening":"morning",incomingReport=sessions.recordsets[1].find(x=>x.operationShift===sourceOperation)||null;cards.push({operationShift,session,incomingReport,eligibility:{allowed:state.allowed,reasons:state.reasons,hasSchedule:Boolean(state.schedule),hasAttendance:Boolean(state.attendance)},leader:session?{employeeId:session.leaderEmployeeId,name:session.leaderName,role:"reporter"}:null})}
  res.json({success:true,data:{businessDateTime:clock.businessDateTime,businessDate:clock.businessDate,branchId:employee.branchId,shifts:cards}});
 }catch(error){next(error)}}
 

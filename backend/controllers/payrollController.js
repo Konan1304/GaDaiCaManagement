@@ -45,7 +45,7 @@ async function list(req,res,next){try{
   else if(requestedBranch){where.push("e.branch_id=@branchId");request.input("branchId",sql.Int,requestedBranch)}
   const result=await request.input("defaultRate",sql.Decimal(18,2),DEFAULT_RATE).query(`${attendanceCte}
     SELECT e.id AS employeeId,e.employee_code AS employeeCode,u.full_name AS fullName,
-      pos.position_name AS positionName,b.branch_name AS branchName,
+      e.branch_id AS branchId,pos.position_name AS positionName,b.branch_name AS branchName,
       COALESCE(w.total_work_days,0) AS totalWorkDays,COALESCE(w.total_work_hours,0) AS totalWorkHours,
       COALESCE(pr.hourly_rate,rate.hourly_rate,@defaultRate) AS hourlyRate,
       CASE WHEN pr.status IN('confirmed','paid') THEN pr.base_salary

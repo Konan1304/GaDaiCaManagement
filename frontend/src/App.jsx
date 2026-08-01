@@ -62,7 +62,7 @@ export default function App() {
         <Route path="schedules" element={<SchedulePage />} />
         <Route path="attendance" element={<ManagerAttendancePage />} />
         {isSandbox&&<Route path="attendance/test" element={<AttendanceTestPage />} />}
-        {isSandbox&&<Route path="operations" element={<OperationsFoundationPage />} />}
+        {isSandbox&&<Route path="operations" element={<Navigate to="/manager/operations/dashboard" replace />} />}
         {isSandbox&&<Route path="operations/dashboard" element={<OperationDashboardPage />} />}
         {isSandbox&&<Route path="chat" element={<InternalChatPage />} />}
         {isSandbox&&<Route path="notification-center" element={<NotificationCenterPage />} />}
@@ -87,7 +87,7 @@ export default function App() {
         <Route path="orders" element={<Navigate to="/employee/home" replace />} />
         <Route path="shift" element={isSandbox?<OperationShiftPage/>:<ShiftPage/>} />
         <Route path="attendance" element={<AttendancePage />} />
-        <Route path="shift-closing" element={<ShiftClosingPage />} />
+        <Route path="shift-closing" element={isSandbox?<Navigate to="/employee/shift" replace/>:<ShiftClosingPage/>} />
         <Route path="shift-report" element={isSandbox?<Navigate to="/employee/shift" replace/>:<ShiftReportPage/>} />
         <Route path="shift-registration" element={<ShiftRegistrationPage />} />
         <Route path="expenses" element={<ExpensesPage />} />

@@ -1,0 +1,79 @@
+.operation-mode-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin: 14px 0 18px;
+}
+
+.operation-mode-button {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 92px;
+  padding: 16px 18px;
+  border: 1px solid #eadfca;
+  border-radius: 16px;
+  background: #fff;
+  color: #171717;
+  text-align: left;
+  box-shadow: 0 10px 25px #5b4b2512;
+  cursor: pointer;
+}
+
+.operation-mode-button > svg {
+  flex: 0 0 auto;
+  width: 42px;
+  height: 42px;
+  padding: 11px;
+  border-radius: 13px;
+  background: #fff1bd;
+  color: #a87500;
+}
+
+.operation-mode-button span { display: grid; gap: 3px; }
+.operation-mode-button small { color: #987000; font-size: 9px; font-weight: 900; }
+.operation-mode-button b { font-size: 20px; }
+.operation-mode-button em { color: #777; font-size: 10px; font-style: normal; }
+.operation-mode-button.close { border-color: #eadfca; background: #fff; }
+.operation-mode-button.active { border: 2px solid #efb800; box-shadow: 0 10px 25px #d99e0030; }
+.operation-mode-button.close.active { background: #fff9df; }
+.operation-mode-button:disabled { cursor: not-allowed; filter: grayscale(1); opacity: .55; }
+.operation-report, .operation-cards { scroll-margin-top: 90px; }
+
+.operation-opening-cash {
+  display: grid;
+  gap: 5px;
+  margin-top: 12px;
+  padding: 16px;
+  border: 1px solid #efd58e;
+  border-radius: 13px;
+  background: #fff9df;
+}
+
+.operation-opening-cash small { color: #8b6700; font-weight: 800; }
+.operation-opening-cash b { font-size: 23px; }
+.operation-opening-cash span { color: #777; font-size: 10px; }
+
+.operation-payment-total {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 5px 18px;
+  align-items: center;
+  margin-top: 14px;
+  padding: 16px 18px;
+  border: 2px solid #efb800;
+  border-radius: 14px;
+  background: #fff8d7;
+}
+
+.operation-payment-total span { font-size: 13px; font-weight: 900; }
+.operation-payment-total b { grid-row: 1 / 3; grid-column: 2; color: #8a6200; font-size: 24px; }
+.operation-payment-total small { color: #777; }
+
+@media (max-width: 620px) {
+  .operation-mode-actions { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .operation-mode-button { min-height: 105px; padding: 12px; align-items: flex-start; }
+  .operation-mode-button > svg { width: 34px; height: 34px; padding: 8px; }
+  .operation-mode-button b { font-size: 17px; }
+  .operation-mode-button em { display: none; }
+}
