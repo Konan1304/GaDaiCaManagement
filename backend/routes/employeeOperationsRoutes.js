@@ -11,6 +11,7 @@ router.get("/schedules",c.mySchedules);
 router.get("/schedules/me",c.mySchedules);
 router.get("/attendance",c.myAttendance);
 router.get("/attendance/today",c.attendanceToday);
+if(process.env.APP_ENV==="sandbox")router.get("/attendance/test-schedules",c.attendanceTestSchedules);
 router.post("/attendance/check-in",c.attendanceCheckIn);
 router.post("/attendance/check-out",c.attendanceCheckOut);
 router.get("/attendance/history",c.attendanceHistory);

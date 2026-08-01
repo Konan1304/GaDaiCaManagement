@@ -85,7 +85,8 @@ export const managerEmployeeApi = {
 export const employeeApi = {
   schedules: (from, to) => axiosClient.get("/employee/schedules", { params:{ from, to } }).then(r=>r.data),
   attendance: () => axiosClient.get("/employee/attendance").then(r=>r.data),
-  attendanceToday: () => axiosClient.get("/employee/attendance/today").then(r=>r.data),
+  attendanceToday: (date,scheduleId) => axiosClient.get("/employee/attendance/today",{params:{...(date?{date}:{}),...(scheduleId?{scheduleId}:{})}}).then(r=>r.data),
+  attendanceTestSchedules: () => axiosClient.get("/employee/attendance/test-schedules").then(r=>r.data),
   attendanceCheckIn: payload => axiosClient.post("/employee/attendance/check-in",payload).then(r=>r.data),
   attendanceCheckOut: payload => axiosClient.post("/employee/attendance/check-out",payload).then(r=>r.data),
   attendanceHistory: month => axiosClient.get("/employee/attendance/history",{params:{month}}).then(r=>r.data),

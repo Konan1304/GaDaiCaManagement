@@ -2,8 +2,17 @@ const { sql, getPool } = require("../config/db");
 const { businessNow } = require("../services/businessClockService");
 const scheduleTestMode=process.env.NODE_ENV!=="production"&&String(process.env.ENABLE_SCHEDULE_TEST_MODE).toLowerCase()==="true";
 
-async function attendanceClock(executor){
-  if(process.env.APP_ENV==="sandbox")return businessNow(executor);
+async function attendanceClock(executor,requestedDate){
+  if(process.env.APP_ENV==="sandbox"){
+    const clock=await businessNow(executor);
+    if(validDate(requestedDate)){
+      const [year,month,day]=String(requestedDate).split("-").map(Number);
+      const businessDateTime=new Date(clock.businessDateTime);
+      businessDateTime.setUTCFullYear(year,month-1,day);
+      return {...clock,businessDate:String(requestedDate),businessDateTime};
+    }
+    return clock;
+  }
   const result=await executor.request().query(`SELECT ${vietnamNowSql} AS businessDateTime,CONVERT(char(10),${vietnamNowSql},23) AS businessDate`);
   return result.recordset[0];
 }
@@ -208,14 +217,15 @@ const publishedScheduleSql=`
   JOIN branches b ON b.id=es.branch_id JOIN positions p ON p.id=e.position_id
   WHERE es.employee_id=@employeeId
     AND es.work_date=@attendanceDate
+    AND (@selectedScheduleId IS NULL OR es.id=@selectedScheduleId)
     AND (es.is_test=0 OR @testMode=1)
     AND es.status<>'cancelled'
     AND EXISTS(SELECT 1 FROM schedule_registration_periods rp WHERE rp.branch_id=es.branch_id
       AND rp.status='published' AND es.work_date BETWEEN rp.week_start_date AND rp.week_end_date)
   ORDER BY s.start_time`;
 
-async function attendanceTodayData(pool,userId){
-  const clock=await attendanceClock(pool);
+async function attendanceTodayData(pool,userId,requestedDate,selectedScheduleId){
+  const clock=await attendanceClock(pool,requestedDate);
   const employeeResult=await pool.request().input("userId",sql.Int,userId).query(`
     SELECT TOP 1 e.id AS employeeId,e.employee_code AS employeeCode,u.full_name AS fullName,
       e.branch_id AS branchId,b.branch_name AS branchName,p.position_name AS positionName
@@ -224,7 +234,7 @@ async function attendanceTodayData(pool,userId){
   const employee=employeeResult.recordset[0];
   if(!employee)return null;
   const result=await pool.request().input("employeeId",sql.Int,employee.employeeId).input("testMode",sql.Bit,scheduleTestMode)
-    .input("attendanceDate",sql.Date,clock.businessDate).input("attendanceNow",sql.DateTime2,clock.businessDateTime).query(`
+    .input("attendanceDate",sql.Date,clock.businessDate).input("selectedScheduleId",sql.Int,Number(selectedScheduleId)||null).input("attendanceNow",sql.DateTime2,clock.businessDateTime).query(`
     ${publishedScheduleSql};
     SELECT TOP 1 id AS attendanceId,schedule_id AS scheduleId,check_in_time AS checkInTime,
       check_out_time AS checkOutTime,COALESCE(worked_minutes,0) AS workedMinutes,
@@ -232,6 +242,7 @@ async function attendanceTodayData(pool,userId){
       CASE WHEN check_out_time IS NOT NULL THEN 'completed' WHEN check_in_time IS NOT NULL THEN 'working' ELSE 'not_checked_in' END AS status,is_test AS isTest,note
     FROM attendance_logs WHERE employee_id=@employeeId
       AND work_date=@attendanceDate
+      AND (@selectedScheduleId IS NULL OR schedule_id=@selectedScheduleId)
       AND (is_test=0 OR @testMode=1) AND check_in_time IS NOT NULL
     ORDER BY check_in_time DESC;
     SELECT @attendanceNow AS serverTime;`);
@@ -243,40 +254,64 @@ async function attendanceTodayData(pool,userId){
         b.branch_name AS branchName,p.position_name AS positionName
       FROM employee_schedules es JOIN shifts s ON s.id=es.shift_id JOIN branches b ON b.id=es.branch_id
       JOIN employees e ON e.id=es.employee_id JOIN positions p ON p.id=e.position_id WHERE es.id=@id`);
-    return {employee,schedule:historical.recordset[0]||null,attendance:normalizeAttendanceTimes(attendance),serverTime:sqlLocalIso(result.recordsets[2][0].serverTime)};
+    return {employee,schedule:historical.recordset[0]||null,attendance:normalizeAttendanceTimes(attendance),businessDate:clock.businessDate,serverTime:sqlLocalIso(result.recordsets[2][0].serverTime)};
   }
-  return {employee,schedule,attendance:schedule?normalizeAttendanceTimes(attendance):null,serverTime:sqlLocalIso(result.recordsets[2][0].serverTime)};
+  return {employee,schedule,attendance:schedule?normalizeAttendanceTimes(attendance):null,businessDate:clock.businessDate,serverTime:sqlLocalIso(result.recordsets[2][0].serverTime)};
 }
 
 async function attendanceToday(req,res,next){try{
-  const data=await attendanceTodayData(await getPool(),req.user.userId);
+  const requestedDate=process.env.APP_ENV==="sandbox"?req.query.date:null;
+  if(requestedDate&&!validDate(requestedDate))return res.status(400).json({success:false,message:"Ngày chấm công kiểm thử không hợp lệ"});
+  const data=await attendanceTodayData(await getPool(),req.user.userId,requestedDate,process.env.APP_ENV==="sandbox"?req.query.scheduleId:null);
   if(!data)return res.status(404).json({success:false,message:"Không tìm thấy hồ sơ nhân viên"});
   res.json({success:true,data});
+}catch(error){next(error)}}
+
+async function attendanceTestSchedules(req,res,next){try{
+  if(process.env.APP_ENV!=="sandbox"||!/_Test$/i.test(process.env.DB_DATABASE||""))return res.status(404).json({success:false,message:"Không tìm thấy chức năng"});
+  const pool=await getPool(),employee=await getEmployee(pool,req.user.userId);
+  if(!employee)return res.status(404).json({success:false,message:"Không tìm thấy hồ sơ nhân viên"});
+  const result=await pool.request().input("employeeId",sql.Int,employee.employeeId).query(`
+    SELECT es.id AS scheduleId,CONVERT(char(10),es.work_date,23) AS workDate,
+      COALESCE(es.display_code,s.shift_code) AS shiftCode,s.shift_name AS shiftName,
+      CONVERT(char(5),COALESCE(es.start_time_override,s.start_time),108) AS startTime,
+      CONVERT(char(5),COALESCE(es.end_time_override,s.end_time),108) AS endTime
+    FROM employee_schedules es JOIN shifts s ON s.id=es.shift_id AND s.status='active'
+    WHERE es.employee_id=@employeeId AND es.is_test=1 AND es.status<>'cancelled'
+      AND EXISTS(SELECT 1 FROM schedule_registration_periods rp WHERE rp.branch_id=es.branch_id
+        AND rp.status='published' AND rp.is_test=1 AND es.work_date BETWEEN rp.week_start_date AND rp.week_end_date)
+    ORDER BY es.work_date,COALESCE(es.start_time_override,s.start_time),es.id`);
+  res.json({success:true,data:result.recordset});
 }catch(error){next(error)}}
 
 async function attendanceCheckIn(req,res,next){
   const pool=await getPool(),transaction=new sql.Transaction(pool);let started=false;
   try{
     await transaction.begin();started=true;
-    const clock=await attendanceClock({request:()=>new sql.Request(transaction)});
+    const requestedDate=process.env.APP_ENV==="sandbox"?req.body.workDate:null;
+    if(requestedDate&&!validDate(requestedDate)){await transaction.rollback();started=false;return res.status(400).json({success:false,message:"Ngày chấm công kiểm thử không hợp lệ"})}
+    const clock=await attendanceClock({request:()=>new sql.Request(transaction)},requestedDate);
     const employee=await new sql.Request(transaction).input("userId",sql.Int,req.user.userId).query("SELECT TOP 1 id AS employeeId FROM employees WHERE user_id=@userId AND status='working'");
     if(!employee.recordset[0]){await transaction.rollback();started=false;return res.status(404).json({success:false,message:"Không tìm thấy hồ sơ nhân viên"})}
     const employeeId=employee.recordset[0].employeeId,scheduleId=Number(req.body.scheduleId);
-    const schedule=await new sql.Request(transaction).input("employeeId",sql.Int,employeeId).input("scheduleId",sql.Int,scheduleId).input("testMode",sql.Bit,scheduleTestMode)
+    if(!Number.isInteger(scheduleId)||scheduleId<=0){await transaction.rollback();started=false;return res.status(404).json({success:false,message:"Không tìm thấy lịch làm"})}
+    const schedule=await new sql.Request(transaction).input("scheduleId",sql.Int,scheduleId)
       .input("attendanceDate",sql.Date,clock.businessDate).input("attendanceNow",sql.DateTime2,clock.businessDateTime).query(`
-      SELECT TOP 1 es.id AS scheduleId,es.branch_id AS branchId,es.work_date AS workDate,es.is_test AS isTest,COALESCE(es.start_time_override,s.start_time) AS startTime,
+      SELECT TOP 1 es.id AS scheduleId,es.employee_id AS ownerEmployeeId,es.branch_id AS branchId,CONVERT(char(10),es.work_date,23) AS workDate,
+        es.status,es.is_test AS isTest,COALESCE(es.start_time_override,s.start_time) AS startTime,
         DATEADD(SECOND,DATEDIFF(SECOND,CAST('00:00' AS time),COALESCE(es.start_time_override,s.start_time)),CAST(es.work_date AS datetime2)) AS shiftStart,
-        @attendanceNow AS serverTime
+        @attendanceNow AS serverTime,
+        CASE WHEN EXISTS(SELECT 1 FROM schedule_registration_periods rp WHERE rp.branch_id=es.branch_id
+          AND rp.status='published' AND es.work_date BETWEEN rp.week_start_date AND rp.week_end_date) THEN 1 ELSE 0 END AS isPublished
       FROM employee_schedules es JOIN shifts s ON s.id=es.shift_id AND s.status='active'
-      WHERE es.id=@scheduleId AND es.employee_id=@employeeId
-        AND es.work_date=@attendanceDate
-        AND (es.is_test=0 OR @testMode=1)
-        AND es.status<>'cancelled' AND EXISTS(SELECT 1 FROM schedule_registration_periods rp
-          WHERE rp.branch_id=es.branch_id AND rp.status='published' AND es.work_date BETWEEN rp.week_start_date AND rp.week_end_date)`);
+      WHERE es.id=@scheduleId`);
     const shift=schedule.recordset[0];
-    if(!shift){await transaction.rollback();started=false;return res.status(404).json({success:false,message:"Bạn không có lịch làm hôm nay."})}
+    if(!shift){await transaction.rollback();started=false;return res.status(404).json({success:false,message:"Không tìm thấy lịch làm"})}
+    if(Number(shift.ownerEmployeeId)!==Number(employeeId)){await transaction.rollback();started=false;return res.status(403).json({success:false,message:"Bạn không có quyền chấm công cho lịch của nhân viên khác"})}
+    const invalidSchedule=shift.workDate!==clock.businessDate||shift.status==="cancelled"||!shift.isPublished||(process.env.APP_ENV==="sandbox"?!shift.isTest:Boolean(shift.isTest));
+    if(invalidSchedule){await transaction.rollback();started=false;return res.status(409).json({success:false,message:"Lịch chưa công bố hoặc ngày chấm công không hợp lệ"})}
     const existing=await new sql.Request(transaction).input("scheduleId",sql.Int,scheduleId).input("employeeId",sql.Int,employeeId)
-      .query("SELECT id FROM attendance_logs WITH(UPDLOCK,HOLDLOCK) WHERE schedule_id=@scheduleId AND employee_id=@employeeId AND check_in_time IS NOT NULL");
+      .query("SELECT id FROM attendance_logs WITH(UPDLOCK,HOLDLOCK) WHERE schedule_id=@scheduleId AND employee_id=@employeeId");
     if(existing.recordset[0]){await transaction.rollback();started=false;return res.status(409).json({success:false,message:"Bạn đã chấm công vào cho ca này."})}
     if(!shift.isTest&&new Date(shift.serverTime)<new Date(shift.shiftStart).getTime()-30*60000){await transaction.rollback();started=false;return res.status(409).json({success:false,message:"Chưa đến thời gian chấm công. Bạn có thể chấm vào trước ca 30 phút."})}
     // Sandbox: nút chấm công mô phỏng đúng giờ chuẩn của lịch, không dùng giờ
@@ -291,7 +326,7 @@ async function attendanceCheckIn(req,res,next){
         VALUES(@employeeId,@scheduleId,@branchId,@workDate,'check_in',@now,@now,@late,0,
           CASE WHEN @late>0 THEN 'late' ELSE 'working' END,'manual',@note,@isTest,SYSDATETIME(),SYSDATETIME())`);
     await transaction.commit();started=false;
-    const data=await attendanceTodayData(pool,req.user.userId);
+    const data=await attendanceTodayData(pool,req.user.userId,clock.businessDate,scheduleId);
     res.status(201).json({success:true,message:`Chấm công vào thành công lúc ${new Date(data.attendance.checkInTime).toLocaleTimeString("vi-VN",{hour:"2-digit",minute:"2-digit",timeZone:"Asia/Ho_Chi_Minh"})}`,data});
   }catch(error){if(started)await transaction.rollback().catch(()=>{});if(error.number===2601||error.number===2627)return res.status(409).json({success:false,message:"Bạn đã chấm công vào cho ca này."});next(error)}
 }
@@ -300,10 +335,23 @@ async function attendanceCheckOut(req,res,next){
   const pool=await getPool(),transaction=new sql.Transaction(pool);let started=false;
   try{
     await transaction.begin();started=true;
-    const clock=await attendanceClock({request:()=>new sql.Request(transaction)});
+    const requestedDate=process.env.APP_ENV==="sandbox"?req.body.workDate:null;
+    if(requestedDate&&!validDate(requestedDate)){await transaction.rollback();started=false;return res.status(400).json({success:false,message:"Ngày chấm công kiểm thử không hợp lệ"})}
+    const clock=await attendanceClock({request:()=>new sql.Request(transaction)},requestedDate);
     const employee=await new sql.Request(transaction).input("userId",sql.Int,req.user.userId).query("SELECT TOP 1 id AS employeeId FROM employees WHERE user_id=@userId AND status='working'");
     if(!employee.recordset[0]){await transaction.rollback();started=false;return res.status(404).json({success:false,message:"Không tìm thấy hồ sơ nhân viên"})}
     const employeeId=employee.recordset[0].employeeId,scheduleId=Number(req.body.scheduleId);
+    if(!Number.isInteger(scheduleId)||scheduleId<=0){await transaction.rollback();started=false;return res.status(404).json({success:false,message:"Không tìm thấy lịch làm"})}
+    const scheduleAccess=await new sql.Request(transaction).input("scheduleId",sql.Int,scheduleId).query(`
+      SELECT es.employee_id AS ownerEmployeeId,CONVERT(char(10),es.work_date,23) AS workDate,es.status,es.is_test AS isTest,
+        CASE WHEN EXISTS(SELECT 1 FROM schedule_registration_periods rp WHERE rp.branch_id=es.branch_id
+          AND rp.status='published' AND es.work_date BETWEEN rp.week_start_date AND rp.week_end_date) THEN 1 ELSE 0 END AS isPublished
+      FROM employee_schedules es WHERE es.id=@scheduleId`);
+    const access=scheduleAccess.recordset[0];
+    if(!access){await transaction.rollback();started=false;return res.status(404).json({success:false,message:"Không tìm thấy lịch làm"})}
+    if(Number(access.ownerEmployeeId)!==Number(employeeId)){await transaction.rollback();started=false;return res.status(403).json({success:false,message:"Bạn không có quyền chấm công cho lịch của nhân viên khác"})}
+    const invalidAccess=access.workDate!==clock.businessDate||access.status==="cancelled"||!access.isPublished||(process.env.APP_ENV==="sandbox"?!access.isTest:Boolean(access.isTest));
+    if(invalidAccess){await transaction.rollback();started=false;return res.status(409).json({success:false,message:"Lịch chưa công bố hoặc ngày chấm công không hợp lệ"})}
     const result=await new sql.Request(transaction).input("employeeId",sql.Int,employeeId).input("scheduleId",sql.Int,scheduleId).input("testMode",sql.Bit,scheduleTestMode)
       .input("attendanceDate",sql.Date,clock.businessDate).input("attendanceNow",sql.DateTime2,clock.businessDateTime).query(`
       SELECT TOP 1 al.id,al.check_in_time AS checkInTime,al.check_out_time AS checkOutTime,al.is_test AS isTest,es.work_date AS workDate,COALESCE(es.end_time_override,s.end_time) AS endTime,
@@ -328,7 +376,7 @@ async function attendanceCheckOut(req,res,next){
           late_minutes=CASE WHEN @isTest=1 THEN 0 ELSE late_minutes END,early_leave_minutes=@early,status='completed',
           note=COALESCE(@note,note),updated_at=SYSDATETIME() WHERE id=@id AND check_out_time IS NULL`);
     await transaction.commit();started=false;
-    const data=await attendanceTodayData(pool,req.user.userId);
+    const data=await attendanceTodayData(pool,req.user.userId,clock.businessDate,scheduleId);
     res.json({success:true,message:`Chấm công ra thành công lúc ${new Date(data.attendance.checkOutTime).toLocaleTimeString("vi-VN",{hour:"2-digit",minute:"2-digit",timeZone:"Asia/Ho_Chi_Minh"})}`,data});
   }catch(error){if(started)await transaction.rollback().catch(()=>{});next(error)}
 }
@@ -352,4 +400,4 @@ async function attendanceHistory(req,res,next){try{
   res.json({success:true,data:result.recordset.map(row=>({...row,checkInTime:sqlLocalIso(row.checkInTime),checkOutTime:sqlLocalIso(row.checkOutTime)}))});
 }catch(error){next(error)}}
 
-module.exports={mySchedules,myAttendance,attendanceToday,attendanceCheckIn,attendanceCheckOut,attendanceHistory,currentShiftSession,openShiftSession,closeShiftSession,myShiftReports,myExpenses,createExpense,myLeaveRequests,createLeaveRequest,myNotifications,readNotification};
+module.exports={mySchedules,myAttendance,attendanceToday,attendanceTestSchedules,attendanceCheckIn,attendanceCheckOut,attendanceHistory,currentShiftSession,openShiftSession,closeShiftSession,myShiftReports,myExpenses,createExpense,myLeaveRequests,createLeaveRequest,myNotifications,readNotification};

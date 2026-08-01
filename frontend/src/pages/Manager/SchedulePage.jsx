@@ -1,7 +1,7 @@
 import {useEffect,useMemo,useState} from "react";
 import {FiArrowRight,FiCalendar,FiChevronLeft,FiChevronRight,FiClock,FiGitBranch,FiPlus,FiSearch,FiUsers} from "react-icons/fi";
 import {useNavigate} from "react-router-dom";
-import {managerEmployeeApi,managerScheduleApi,scheduleRegistrationApi} from "../../api/services";
+import {environmentApi,managerEmployeeApi,managerScheduleApi,scheduleRegistrationApi} from "../../api/services";
 
 const dayNames=["Chủ nhật","Thứ 2","Thứ 3","Thứ 4","Thứ 5","Thứ 6","Thứ 7"];
 const weekNames=["Thứ 2","Thứ 3","Thứ 4","Thứ 5","Thứ 6","Thứ 7","Chủ nhật"];
@@ -23,6 +23,17 @@ export default function SchedulePage(){
 
  useEffect(()=>{Promise.all([managerEmployeeApi.employeeBranches({status:"active"}),managerEmployeeApi.positions()]).then(([b,p])=>{setBranches(b.data||[]);setPositions(p.data||[])}).catch(e=>setError(e.response?.data?.message||"Không tải được danh sách chi nhánh")).finally(()=>setBranchesLoading(false))},[]);
  useEffect(()=>{if(!selectedBranch){setData({employees:[],schedules:[]});setLoading(false);return}let active=true;setLoading(true);setError("");setData({employees:[],schedules:[]});const timer=setTimeout(()=>managerScheduleApi.list({branchId:selectedBranch.branchId,positionId:filters.positionId,search:filters.search,from,to}).then(response=>{if(active)setData(response.data)}).catch(e=>{if(active)setError(e.response?.data?.message||"Không tải được lịch làm")}).finally(()=>{if(active)setLoading(false)}),filters.search?250:0);return()=>{active=false;clearTimeout(timer)}},[from,to,selectedBranch,filters.positionId,filters.search]);
+
+ useEffect(()=>{
+  if(import.meta.env.VITE_APP_ENV!=="sandbox")return;
+  environmentApi.get().then(result=>{
+   if(result.appEnv!=="sandbox"||!result.businessDateTime)return;
+   const businessDate=new Date(String(result.businessDateTime).replace(/Z$/,"").slice(0,19));
+   setAnchor(mondayOf(businessDate));
+   setMonth(new Date(businessDate.getFullYear(),businessDate.getMonth(),1));
+   setSelectedDate(dateKey(businessDate));
+  }).catch(()=>{});
+ },[]);
 
  const visibleBranches=useMemo(()=>{const keyword=branchSearch.trim().toLowerCase();return keyword?branches.filter(branch=>`${branch.branchName} ${branch.branchCode} ${branch.address||""}`.toLowerCase().includes(keyword)):branches},[branches,branchSearch]);
  const employeesById=useMemo(()=>new Map(data.employees.map(item=>[Number(item.employeeId),item])),[data.employees]);
