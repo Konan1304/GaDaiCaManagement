@@ -31,7 +31,8 @@
     "migrate:weekly-registration": "node scripts/runWeeklyShiftRegistrationMigration.js",
     "test:operations:sandbox": "node scripts/testOperationFoundation.js",
     "test:operation-reporting:sandbox": "node scripts/testOperationReporting.js",
-    "test:operation-suite:sandbox": "node scripts/testOperationSuite.js"
+    "test:operation-suite:sandbox": "node scripts/testOperationSuite.js",
+    "test:inventory:sandbox": "node scripts/testShiftInventorySandbox.js"
   },
   "keywords": [],
   "author": "",

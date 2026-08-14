@@ -29,13 +29,16 @@ app.use("/api/imports", require("./routes/importRoutes"));
 app.use("/api/dashboard", require("./routes/dashboardRoutes"));
 app.use("/api/employee", require("./routes/employeeOperationsRoutes"));
 app.use("/api/manager", require("./routes/employeeRoutes"));
-if(process.env.APP_ENV==="sandbox")app.use("/api/sandbox/attendance-test",require("./routes/sandboxAttendanceRoutes"));
-if(process.env.APP_ENV==="sandbox"){
-  app.use("/api/operations",require("./routes/shiftOperationsRoutes"));
-  app.use("/api/manager/operations",require("./routes/managerOperationsRoutes"));
-  app.use("/api/chat",require("./routes/chatRoutes"));
-  app.use("/api/notifications",require("./routes/notificationCenterRoutes"));
-  require("./services/operationOutboxWorker").start();
+app.use("/api/operations", require("./routes/shiftOperationsRoutes"));
+app.use("/api/manager/operations", require("./routes/managerOperationsRoutes"));
+app.use("/api/chat", require("./routes/chatRoutes"));
+app.use("/api/notifications", require("./routes/notificationCenterRoutes"));
+app.use("/api/shift-inventory", require("./routes/shiftInventoryRoutes"));
+app.use("/api/sandbox/inventory-counts", require("./routes/shiftInventoryRoutes"));
+require("./services/operationOutboxWorker").start();
+
+if (process.env.APP_ENV === "sandbox") {
+  app.use("/api/sandbox/attendance-test", require("./routes/sandboxAttendanceRoutes"));
 }
 
 // CRUD theo tên nghiệp vụ; model được introspect trực tiếp từ SQL Server.

@@ -6,7 +6,7 @@ import {dateKey,shortDate,time} from "../../utils/employeeFormat";
 const isSandbox=import.meta.env.VITE_APP_ENV==="sandbox";
 const commonActions=[["/employee/payroll","Lương của tôi",FiDollarSign],["/employee/shift-registration","Đăng ký lịch làm",FiPlusCircle],["/employee/schedule","Lịch làm",FiCalendar],["/employee/attendance","Chấm công",FiClock]];
 const operationActions=isSandbox
- ? [["/employee/shift","Báo cáo ca",FiFileText]]
+ ? [["/employee/shift","Báo cáo ca",FiFileText],["/employee/shift-inventory","Kiểm kho ca",FiClipboard]]
  : [["/employee/shift","Mở ca",FiRefreshCw],["/employee/shift-closing","Đóng ca",FiLogOut],["/employee/shift-report","Báo cáo ca",FiFileText]];
 const actions=[...commonActions,...operationActions,["/employee/expenses","Chi phí",FiDollarSign],["/employee/leave-request","Xin nghỉ",FiClipboard],["/employee/notifications","Thông báo",FiBell]];
 export default function EmployeeHomePage(){const {profile}=useOutletContext(),[shift,setShift]=useState(null),[schedules,setSchedules]=useState([]),[notices,setNotices]=useState([]),[registration,setRegistration]=useState(null),[error,setError]=useState("");

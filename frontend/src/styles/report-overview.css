@@ -1,0 +1,4 @@
+.shift-analytics.branch-overview .shift-report-stats,
+.shift-analytics.branch-overview .shift-report-charts {
+  display: none;
+}

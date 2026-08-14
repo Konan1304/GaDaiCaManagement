@@ -1,6 +1,5 @@
 import {NavLink} from "react-router-dom";
 import {FiBarChart2,FiBell,FiBox,FiCalendar,FiClipboard,FiClock,FiDollarSign,FiGrid,FiLogOut,FiMessageCircle,FiPackage,FiPlusSquare,FiSettings,FiShoppingBag,FiTag,FiTruck,FiUsers,FiX} from "react-icons/fi";
-const isSandbox=import.meta.env.VITE_APP_ENV==="sandbox";
 
 const menuGroups=[
   {title:"TỔNG QUAN",items:[
@@ -14,6 +13,7 @@ const menuGroups=[
     ["/manager/payrolls","Lương",FiDollarSign],
   ]},
   {title:"QUẢN LÝ KHO",items:[
+    ["/manager/shift-inventory","Kiểm kho theo ca",FiClipboard],
     ["/manager/inventory","Kho hàng",FiBox],
     ["/manager/imports","Nhập hàng",FiTruck],
     ["/manager/exports","Xuất hàng",FiClipboard],
@@ -22,12 +22,12 @@ const menuGroups=[
     ["/manager/suppliers","Nhà cung cấp",FiPackage],
   ]},
   {title:"QUẢN LÝ CỬA HÀNG",items:[
-    ...(isSandbox?[["/manager/operations/dashboard","Báo cáo ca",FiClipboard],["/manager/chat","Chat nội bộ",FiMessageCircle]]:[]),
+    ["/manager/operations/dashboard","Báo cáo ca",FiClipboard],
+    ["/manager/chat","Chat nội bộ",FiMessageCircle],
     ["/manager/reports","Báo cáo",FiBarChart2],
   ]},
   {title:"HỆ THỐNG",items:[
-    ["/manager/notifications","Thông báo",FiBell],
-    ...(isSandbox?[["/manager/notification-center","Notification Center",FiBell]]:[]),
+    ["/manager/notification-center","Thông báo",FiBell],
     ["/manager/settings","Cài đặt",FiSettings],
   ]},
 ];

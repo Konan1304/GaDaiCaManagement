@@ -19,7 +19,9 @@ const migrationOrder = [
   "20260801_operation_suite.sql",
   "20260802_shift_report_xanh_sm.sql",
   "20260725_july_attendance_test_batch.sql",
+  "20260815_shift_inventory_production.sql",
 ];
+const sandboxMigrationOrder = ["20260806_shift_inventory_sandbox.sql"];
 
 function splitBatches(source) { return source.split(/^\s*GO\s*$/gim).map((value) => value.trim()).filter(Boolean); }
 function connectionConfig(database) {
@@ -42,7 +44,8 @@ async function runMigrations(pool) {
   await ensureMigrationTable(pool);
   const root = path.resolve(__dirname, "../../database/migrations");
   const applied = [];
-  for (const name of migrationOrder) {
+  const selectedMigrations = process.env.APP_ENV === "sandbox" ? [...migrationOrder, ...sandboxMigrationOrder] : migrationOrder;
+  for (const name of selectedMigrations) {
     const source = fs.readFileSync(path.join(root, name), "utf8");
     const checksum = crypto.createHash("sha256").update(source).digest("hex");
     const existing = await pool.request().input("name", sql.VarChar(200), name).query("SELECT checksum FROM dbo.schema_migrations WHERE migration_name=@name");

@@ -1,9 +1,47 @@
 const {sql,getPool}=require("../config/db");
 const messages={SHIFT_OPENED:"Ca đã được mở.",SHIFT_REPORT_DRAFT_SAVED:"Báo cáo ca đã được lưu nháp.",SHIFT_REPORT_SUBMITTED:"Ca đã gửi báo cáo và đang chờ nhận bàn giao.",SHIFT_HANDOVER_ACCEPTED:"Ca kế tiếp đã nhận bàn giao.",SHIFT_HANDOVER_DISPUTED:"Bàn giao ca có tranh chấp.",SHIFT_REPORT_UNLOCKED:"Báo cáo ca đã được mở khóa.",SHIFT_LOCKED:"Ca đã được khóa."};
 let running=false,timer;
-async function processOne(pool,event){const tx=new sql.Transaction(pool);let begun=false;try{await tx.begin();begun=true;const ex=()=>new sql.Request(tx),session=await ex().input("id",sql.Int,event.entityId).query("SELECT TOP 1 id,branch_id branchId,business_date businessDate,operation_shift_code operationShift FROM shift_sessions WHERE id=@id AND is_test=1");const s=session.recordset[0];if(!s){await ex().input("id",sql.BigInt,event.id).query("UPDATE business_events SET process_status='processed',processed_at=SYSDATETIME() WHERE id=@id");await tx.commit();return}const channel=await ex().input("branch",sql.Int,s.branchId).query("SELECT TOP 1 id FROM chat_channels WHERE branch_id=@branch AND channel_type='SHIFT_HANDOVER' AND is_test=1");let messageId=null;if(channel.recordset[0]){const m=await ex().input("channel",sql.Int,channel.recordset[0].id).input("event",sql.BigInt,event.id).input("content",sql.NVarChar(2000),messages[event.eventType]||event.eventType).input("url",sql.NVarChar(500),`/manager/operations`).query("IF NOT EXISTS(SELECT 1 FROM chat_messages WHERE business_event_id=@event) INSERT chat_messages(channel_id,message_type,content,business_event_id,action_url,is_test) OUTPUT INSERTED.id VALUES(@channel,'event',@content,@event,@url,1)");messageId=m.recordset[0]?.id||null}
- if(['SHIFT_REPORT_SUBMITTED','SHIFT_HANDOVER_DISPUTED','SHIFT_REPORT_UNLOCKED'].includes(event.eventType)){let targetDate=s.businessDate,targetOp=s.operationShift==='morning'?'evening':'morning';if(s.operationShift==='evening')targetDate=new Date(new Date(s.businessDate).getTime()+86400000);const users=await ex().input("branch",sql.Int,s.branchId).input("date",sql.Date,targetDate).input("op",sql.VarChar(10),targetOp).query("SELECT DISTINCT e.user_id userId FROM operation_shift_assignments a JOIN employees e ON e.id=a.employee_id WHERE a.branch_id=@branch AND a.business_date=@date AND a.operation_shift_code=@op AND a.status='assigned' AND a.is_test=1");for(const u of users.recordset)await ex().input("uid",sql.Int,u.userId).input("event",sql.BigInt,event.id).input("chat",sql.BigInt,messageId).input("title",sql.NVarChar(200),event.eventType==='SHIFT_REPORT_SUBMITTED'?"Có báo cáo ca cần nhận bàn giao":"Cập nhật vận hành ca").input("content",sql.NVarChar(1000),messages[event.eventType]||event.eventType).query("IF NOT EXISTS(SELECT 1 FROM notifications WHERE business_event_id=@event AND user_id=@uid) INSERT notifications(user_id,notification_type,title,content,business_event_id,chat_message_id,action_url,priority,is_test) VALUES(@uid,'operation',@title,@content,@event,@chat,'/employee/shift','high',1)")}
- await ex().input("id",sql.BigInt,event.id).query("UPDATE business_events SET process_status='processed',processed_at=SYSDATETIME(),last_error=NULL WHERE id=@id");await tx.commit();begun=false}catch(e){if(begun)await tx.rollback().catch(()=>{});await pool.request().input("id",sql.BigInt,event.id).input("error",sql.NVarChar(1000),String(e.message).slice(0,1000)).query("UPDATE business_events SET process_status='failed',retry_count=retry_count+1,last_error=@error WHERE id=@id").catch(()=>{})}}
-async function tick(){if(running)return;running=true;try{const p=await getPool(),r=await p.request().query("SELECT TOP 20 id,event_type eventType,entity_id entityId FROM business_events WHERE is_test=1 AND process_status IN('pending','failed') AND retry_count<5 ORDER BY id");for(const e of r.recordset)await processOne(p,e)}finally{running=false}}
-function start(){if(process.env.APP_ENV!=="sandbox"||timer)return;timer=setInterval(tick,3000);timer.unref();tick()}
+const isTestEnv = () => (process.env.APP_ENV === "sandbox" ? 1 : 0);
+async function processOne(pool,event){
+  const isTest = isTestEnv();
+  const tx=new sql.Transaction(pool);let begun=false;
+  try{
+    await tx.begin();begun=true;
+    const ex=()=>new sql.Request(tx),session=await ex().input("id",sql.Int,event.entityId).input("isTest",sql.Bit,isTest).query("SELECT TOP 1 id,branch_id branchId,business_date businessDate,operation_shift_code operationShift FROM shift_sessions WHERE id=@id AND is_test=@isTest");
+    const s=session.recordset[0];
+    if(!s){await ex().input("id",sql.BigInt,event.id).query("UPDATE business_events SET process_status='processed',processed_at=SYSDATETIME() WHERE id=@id");await tx.commit();return}
+    const channel=await ex().input("branch",sql.Int,s.branchId).input("isTest",sql.Bit,isTest).query("SELECT TOP 1 id FROM chat_channels WHERE branch_id=@branch AND channel_type='SHIFT_HANDOVER' AND is_test=@isTest");
+    let messageId=null;
+    if(channel.recordset[0]){
+      const m=await ex().input("channel",sql.Int,channel.recordset[0].id).input("event",sql.BigInt,event.id).input("content",sql.NVarChar(2000),messages[event.eventType]||event.eventType).input("url",sql.NVarChar(500),`/manager/operations`).input("isTest",sql.Bit,isTest).query("IF NOT EXISTS(SELECT 1 FROM chat_messages WHERE business_event_id=@event) INSERT chat_messages(channel_id,message_type,content,business_event_id,action_url,is_test) OUTPUT INSERTED.id VALUES(@channel,'event',@content,@event,@url,@isTest)");
+      messageId=m.recordset[0]?.id||null;
+    }
+    if(['SHIFT_REPORT_SUBMITTED','SHIFT_HANDOVER_DISPUTED','SHIFT_REPORT_UNLOCKED'].includes(event.eventType)){
+      let targetDate=s.businessDate,targetOp=s.operationShift==='morning'?'evening':'morning';
+      if(s.operationShift==='evening')targetDate=new Date(new Date(s.businessDate).getTime()+86400000);
+      const users=await ex().input("branch",sql.Int,s.branchId).input("date",sql.Date,targetDate).input("op",sql.VarChar(10),targetOp).input("isTest",sql.Bit,isTest).query("SELECT DISTINCT e.user_id userId FROM operation_shift_assignments a JOIN employees e ON e.id=a.employee_id WHERE a.branch_id=@branch AND a.business_date=@date AND a.operation_shift_code=@op AND a.status='assigned' AND (a.is_test=@isTest OR (a.is_test=0 AND @isTest=1))");
+      for(const u of users.recordset)await ex().input("uid",sql.Int,u.userId).input("event",sql.BigInt,event.id).input("chat",sql.BigInt,messageId).input("title",sql.NVarChar(200),event.eventType==='SHIFT_REPORT_SUBMITTED'?"Có báo cáo ca cần nhận bàn giao":"Cập nhật vận hành ca").input("content",sql.NVarChar(1000),messages[event.eventType]||event.eventType).input("isTest",sql.Bit,isTest).query("IF NOT EXISTS(SELECT 1 FROM notifications WHERE business_event_id=@event AND user_id=@uid) INSERT notifications(user_id,notification_type,title,content,business_event_id,chat_message_id,action_url,priority,is_test) VALUES(@uid,'operation',@title,@content,@event,@chat,'/employee/shift','high',@isTest)");
+    }
+    await ex().input("id",sql.BigInt,event.id).query("UPDATE business_events SET process_status='processed',processed_at=SYSDATETIME(),last_error=NULL WHERE id=@id");
+    await tx.commit();begun=false;
+  }catch(e){
+    if(begun)await tx.rollback().catch(()=>{});
+    await pool.request().input("id",sql.BigInt,event.id).input("error",sql.NVarChar(1000),String(e.message).slice(0,1000)).query("UPDATE business_events SET process_status='failed',retry_count=retry_count+1,last_error=@error WHERE id=@id").catch(()=>{});
+  }
+}
+async function tick(){
+  if(running)return;
+  running=true;
+  try{
+    const isTest = isTestEnv();
+    const p=await getPool(),r=await p.request().input("isTest",sql.Bit,isTest).query("SELECT TOP 20 id,event_type eventType,entity_id entityId FROM business_events WHERE is_test=@isTest AND process_status IN('pending','failed') AND retry_count<5 ORDER BY id");
+    for(const e of r.recordset)await processOne(p,e);
+  }finally{running=false;}
+}
+function start(){
+  if(timer)return;
+  timer=setInterval(tick,3000);
+  timer.unref();
+  tick();
+}
 module.exports={start,tick};

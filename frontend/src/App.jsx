@@ -16,15 +16,12 @@ import ImportInventoryPage from "./pages/Inventory/ImportInventoryPage";
 import ProductsPage from "./pages/Inventory/InventoryHistoryPage";
 import ReportsPage from "./pages/Manager/ShiftsPage";
 import EmployeeHomePage from "./pages/Employee/EmployeeHomePage";
-import ShiftPage from "./pages/Employee/ShiftPage";
 import AttendancePage from "./pages/Employee/AttendancePage";
-import ShiftClosingPage from "./pages/Employee/ShiftClosingPage";
 import ExpensesPage from "./pages/Employee/ExpensesPage";
 import MySchedulePage from "./pages/Employee/MySchedulePage";
 import ProfilePage from "./pages/Employee/ProfilePage";
 import LeaveRequestPage from "./pages/Employee/LeaveRequestPage";
 import NotificationsPage from "./pages/Employee/NotificationsPage";
-import ShiftReportPage from "./pages/Employee/ShiftReportPage";
 import ShiftRegistrationPage from "./pages/Employee/ShiftRegistrationPage";
 import ManagerShiftRegistrationPage from "./pages/Manager/ShiftRegistrationPage";
 import ShiftRegistrationDetailPage from "./pages/Manager/ShiftRegistrationDetailPage";
@@ -36,11 +33,12 @@ import ManagerAttendancePage from "./pages/Manager/ManagerAttendancePage";
 import CategoriesPage from "./pages/Manager/CategoriesPage";
 import SuppliersPage from "./pages/Manager/SuppliersPage";
 import AttendanceTestPage from "./pages/Manager/AttendanceTestPage";
-import OperationsFoundationPage from "./pages/Manager/OperationsFoundationPage";
 import OperationShiftPage from "./pages/Employee/OperationShiftPage";
 import OperationDashboardPage from "./pages/Manager/OperationDashboardPage";
 import InternalChatPage from "./pages/Shared/InternalChatPage";
 import NotificationCenterPage from "./pages/Shared/NotificationCenterPage";
+import ShiftInventoryPage from "./pages/Employee/ShiftInventoryPage";
+import ShiftInventoryAdminPage from "./pages/Manager/ShiftInventoryAdminPage";
 
 const isSandbox=import.meta.env.VITE_APP_ENV==="sandbox";
 
@@ -62,10 +60,11 @@ export default function App() {
         <Route path="schedules" element={<SchedulePage />} />
         <Route path="attendance" element={<ManagerAttendancePage />} />
         {isSandbox&&<Route path="attendance/test" element={<AttendanceTestPage />} />}
-        {isSandbox&&<Route path="operations" element={<Navigate to="/manager/operations/dashboard" replace />} />}
-        {isSandbox&&<Route path="operations/dashboard" element={<OperationDashboardPage />} />}
-        {isSandbox&&<Route path="chat" element={<InternalChatPage />} />}
-        {isSandbox&&<Route path="notification-center" element={<NotificationCenterPage />} />}
+        <Route path="operations" element={<Navigate to="/manager/operations/dashboard" replace />} />
+        <Route path="operations/dashboard" element={<OperationDashboardPage />} />
+        <Route path="chat" element={<InternalChatPage />} />
+        <Route path="notification-center" element={<NotificationCenterPage />} />
+        <Route path="shift-inventory" element={<ShiftInventoryAdminPage />} />
         <Route path="inventory" element={<InventoryPage />} />
         <Route path="imports" element={<ImportInventoryPage />} />
         <Route path="exports" element={<ManagerUtilityPage type="exports" />} />
@@ -85,10 +84,10 @@ export default function App() {
         <Route path="home" element={<EmployeeHomePage />} />
         <Route path="pos" element={<Navigate to="/employee/home" replace />} />
         <Route path="orders" element={<Navigate to="/employee/home" replace />} />
-        <Route path="shift" element={isSandbox?<OperationShiftPage/>:<ShiftPage/>} />
+        <Route path="shift" element={<OperationShiftPage />} />
         <Route path="attendance" element={<AttendancePage />} />
-        <Route path="shift-closing" element={isSandbox?<Navigate to="/employee/shift" replace/>:<ShiftClosingPage/>} />
-        <Route path="shift-report" element={isSandbox?<Navigate to="/employee/shift" replace/>:<ShiftReportPage/>} />
+        <Route path="shift-closing" element={<Navigate to="/employee/shift" replace />} />
+        <Route path="shift-report" element={<Navigate to="/employee/shift" replace />} />
         <Route path="shift-registration" element={<ShiftRegistrationPage />} />
         <Route path="expenses" element={<ExpensesPage />} />
         <Route path="schedule" element={<MySchedulePage />} />
@@ -96,8 +95,9 @@ export default function App() {
         <Route path="notifications" element={<NotificationsPage />} />
         <Route path="profile" element={<ProfilePage />} />
         <Route path="payroll" element={<EmployeePayrollPage />} />
-        {isSandbox&&<Route path="chat" element={<InternalChatPage />} />}
-        {isSandbox&&<Route path="notification-center" element={<NotificationCenterPage />} />}
+        <Route path="chat" element={<InternalChatPage />} />
+        <Route path="shift-inventory" element={<ShiftInventoryPage />} />
+        <Route path="notification-center" element={<NotificationCenterPage />} />
       </Route>
     </Route>
     <Route path="*" element={<RoleHome />} />

@@ -71,11 +71,13 @@ function Report({ session, reload }) {
 }
 
 export default function OperationShiftPage(){
+  const isSandbox=import.meta.env.VITE_APP_ENV==="sandbox";
+  const sandboxDate=isSandbox?localStorage.getItem("sandbox-operation-date")||"":null;
   const [data,setData]=useState(null), [loading,setLoading]=useState(true), [error,setError]=useState(""), [message,setMessage]=useState(""), [mode,setMode]=useState("open");
-  async function load(){setLoading(true);setError("");try{const result=await operationApi.current();setData(result?.data||{shifts:[]})}catch(e){setError(apiError(e));setData({shifts:[]})}finally{setLoading(false)}}
+  async function load(){setLoading(true);setError("");try{const result=await operationApi.current(sandboxDate);setData(result?.data||{shifts:[]})}catch(e){setError(apiError(e));setData({shifts:[]})}finally{setLoading(false)}}
   useEffect(()=>{load()},[]);
   useEffect(()=>{if(mode!=="close")return;const hasReportSession=(data?.shifts||[]).some(item=>item.session);if(data&&!hasReportSession)setMode("open")},[data,mode]);
-  async function open(operationShift){try{const result=await operationApi.open({operationShift});setMessage(result.message);await load()}catch(e){setError(apiError(e))}}
+  async function open(operationShift){try{const result=await operationApi.open({operationShift,...(isSandbox&&sandboxDate?{businessDate:sandboxDate}:{})});setMessage(result.message);await load()}catch(e){setError(apiError(e))}}
   if(loading)return <div className="emp-card emp-empty">Đang kiểm tra ca...</div>;
   const shifts=(Array.isArray(data?.shifts)?data.shifts:[]).filter(item=>item.session||item.eligibility?.hasSchedule);
   const reportSession=shifts.find(item=>item.session)?.session;
