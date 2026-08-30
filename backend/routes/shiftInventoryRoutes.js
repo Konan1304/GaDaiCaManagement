@@ -12,6 +12,7 @@ router.get('/admin/discrepancies',allowRoles('admin','manager'),c.discrepancies)
 router.post('/admin/discrepancies/:id/resolve',allowRoles('admin','manager'),c.resolve);
 router.get('/images/:attachmentId/file',c.image);
 router.get('/:id/movements',c.movements);
+router.post('/:id/usage',c.recordUsage);
 router.post('/:id/images',upload.single('image'),c.uploadImage);
 router.post('/:id/receive',c.receive);
 router.post('/:id/close',c.close);

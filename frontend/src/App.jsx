@@ -12,8 +12,6 @@ import EmployeeBranchesPage from "./pages/Manager/EmployeeBranchesPage";
 import SchedulePage from "./pages/Manager/SchedulePage";
 import ManagerUtilityPage from "./pages/Manager/ManagerUtilityPage";
 import InventoryPage from "./pages/Inventory/InventoryPage";
-import ImportInventoryPage from "./pages/Inventory/ImportInventoryPage";
-import ProductsPage from "./pages/Inventory/InventoryHistoryPage";
 import ReportsPage from "./pages/Manager/ShiftsPage";
 import EmployeeHomePage from "./pages/Employee/EmployeeHomePage";
 import AttendancePage from "./pages/Employee/AttendancePage";
@@ -66,9 +64,9 @@ export default function App() {
         <Route path="notification-center" element={<NotificationCenterPage />} />
         <Route path="shift-inventory" element={<ShiftInventoryAdminPage />} />
         <Route path="inventory" element={<InventoryPage />} />
-        <Route path="imports" element={<ImportInventoryPage />} />
-        <Route path="exports" element={<ManagerUtilityPage type="exports" />} />
-        <Route path="products" element={<ProductsPage />} />
+        <Route path="imports" element={<Navigate to="/manager/inventory?tab=transactions" replace />} />
+        <Route path="exports" element={<Navigate to="/manager/inventory?tab=transactions" replace />} />
+        <Route path="products" element={<Navigate to="/manager/inventory?tab=products" replace />} />
         <Route path="categories" element={<CategoriesPage />} />
         <Route path="suppliers" element={<SuppliersPage />} />
         <Route path="reports" element={<ReportsPage />} />

@@ -1,5 +1,5 @@
 import {NavLink} from "react-router-dom";
-import {FiBarChart2,FiBell,FiBox,FiCalendar,FiClipboard,FiClock,FiDollarSign,FiGrid,FiLogOut,FiMessageCircle,FiPackage,FiPlusSquare,FiSettings,FiShoppingBag,FiTag,FiTruck,FiUsers,FiX} from "react-icons/fi";
+import {FiBarChart2,FiBell,FiBox,FiCalendar,FiClipboard,FiClock,FiDollarSign,FiGrid,FiLogOut,FiMessageCircle,FiPackage,FiPlusSquare,FiSettings,FiTag,FiUsers,FiX} from "react-icons/fi";
 
 const menuGroups=[
   {title:"TỔNG QUAN",items:[
@@ -14,10 +14,7 @@ const menuGroups=[
   ]},
   {title:"QUẢN LÝ KHO",items:[
     ["/manager/shift-inventory","Kiểm kho theo ca",FiClipboard],
-    ["/manager/inventory","Kho hàng",FiBox],
-    ["/manager/imports","Nhập hàng",FiTruck],
-    ["/manager/exports","Xuất hàng",FiClipboard],
-    ["/manager/products","Sản phẩm",FiShoppingBag],
+    ["/manager/inventory","Tổng kho hàng",FiBox],
     ["/manager/categories","Danh mục",FiTag],
     ["/manager/suppliers","Nhà cung cấp",FiPackage],
   ]},

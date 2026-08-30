@@ -7,6 +7,7 @@ const fail = (res, status, message, data) => res.status(status).json({ success: 
 const validOperation = value => ['morning', 'evening'].includes(value);
 const executor = tx => ({ request: () => new sql.Request(tx) });
 const isTestEnv = () => (process.env.APP_ENV === 'sandbox' ? 1 : 0);
+// Sandbox requests pin eligibility to the exact published schedule selected at attendance.
 
 const selectSession = `SELECT ss.id AS shiftSessionId,ss.branch_id AS branchId,b.branch_name AS branchName,CONVERT(char(10),ss.business_date,23) AS businessDate,
  ss.operation_shift_code AS operationShift,ss.leader_employee_id AS leaderEmployeeId,u.full_name AS leaderName,ss.opened_at AS openedAt,
@@ -17,6 +18,7 @@ async function current(req, res, next) { try {
   const isTest = isTestEnv();
   const pool = await getPool(); const clock = await businessNow(pool);
   const requestedDate = process.env.APP_ENV === 'sandbox' && /^\d{4}-\d{2}-\d{2}$/.test(req.query.date || '') ? req.query.date : clock.businessDate;
+  const selectedScheduleId = process.env.APP_ENV === 'sandbox' ? Number(req.query.scheduleId || 0) || null : null;
   const employee = await employeeFromJwt(pool, req.user.userId);
   if (!employee?.employeeId) return fail(res, 404, 'Không tìm thấy hồ sơ nhân viên');
   const sessions = await pool.request().input('branchId', sql.Int, employee.branchId).input('date', sql.Date, requestedDate).input('isTest', sql.Bit, isTest).query(`${selectSession} WHERE ss.branch_id=@branchId AND ss.business_date=@date AND ss.is_test=@isTest AND ss.operation_shift_code IS NOT NULL ORDER BY CASE ss.operation_shift_code WHEN 'morning' THEN 1 ELSE 2 END;
@@ -25,11 +27,11 @@ async function current(req, res, next) { try {
    WHERE ss.branch_id=@branchId AND ss.is_test=@isTest AND r.status='submitted' AND ((ss.operation_shift_code='morning' AND ss.business_date=@date) OR (ss.operation_shift_code='evening' AND ss.business_date=DATEADD(day,-1,@date)))`);
   const cards = [];
   for (const operationShift of ['morning', 'evening']) {
-    const state = await eligibility(pool, { userId: req.user.userId, businessDate: requestedDate, operationShift });
+    const state = await eligibility(pool, { userId: req.user.userId, businessDate: requestedDate, operationShift, scheduleId: selectedScheduleId });
     const session = sessions.recordsets[0].find(x => x.operationShift === operationShift) || null;
     const inventory = (await pool.request().input('b', sql.Int, employee.branchId).input('d', sql.Date, requestedDate).input('o', sql.VarChar(10), operationShift).input('u', sql.Int, req.user.userId).input('isTest', sql.Bit, isTest).query("SELECT TOP 1 id,status FROM shift_inventory_sessions WHERE branch_id=@b AND business_date=@d AND operation_shift_code=@o AND created_by_user_id=@u AND is_test=@isTest ORDER BY id DESC")).recordset[0] || null;
     const reasons = [...state.reasons];
-    if (!session && inventory?.status !== 'IN_PROGRESS') reasons.push('Chưa kiểm và xác nhận nhận kho đầu ca');
+    if (!session && !isTest && inventory?.status !== 'IN_PROGRESS') reasons.push('Chưa kiểm và xác nhận nhận kho đầu ca');
     cards.push({ operationShift, session, incomingReport: sessions.recordsets[1].find(x => x.operationShift === (operationShift === 'morning' ? 'evening' : 'morning')) || null, inventorySession: inventory || null, eligibility: { allowed: reasons.length === 0, reasons, hasSchedule: Boolean(state.schedule), hasAttendance: Boolean(state.attendance) }, leader: session ? { employeeId: session.leaderEmployeeId, name: session.leaderName, role: 'reporter' } : null });
   }
   res.json({ success: true, data: { businessDateTime: clock.businessDateTime, businessDate: requestedDate, branchId: employee.branchId, shifts: cards } });
@@ -68,10 +70,11 @@ async function open(req,res,next){
   const pool=await getPool(),tx=new sql.Transaction(pool);let started=false;try{
   const operationShift=String(req.body.operationShift||'');if(!validOperation(operationShift))return fail(res,400,'Ca vận hành không hợp lệ');
   await tx.begin();started=true;const db=executor(tx),clock=await businessNow(db),businessDate=process.env.APP_ENV==='sandbox'&&/^\d{4}-\d{2}-\d{2}$/.test(req.body.businessDate||'')?req.body.businessDate:clock.businessDate;
-  const state=await eligibility(db,{userId:req.user.userId,businessDate,operationShift});if(!state.allowed){await tx.rollback();started=false;return fail(res,403,'Không đủ điều kiện mở ca',state.reasons)}
+  const selectedScheduleId=process.env.APP_ENV==='sandbox'?Number(req.body.scheduleId||0)||null:null;
+  const state=await eligibility(db,{userId:req.user.userId,businessDate,operationShift,scheduleId:selectedScheduleId});if(!state.allowed){await tx.rollback();started=false;return fail(res,403,'Không đủ điều kiện mở ca',state.reasons)}
   let inventorySessionId=null;
   const inventory=(await db.request().input('b',sql.Int,state.employee.branchId).input('d',sql.Date,businessDate).input('o',sql.VarChar(10),operationShift).input('u',sql.Int,req.user.userId).input('isTest',sql.Bit,isTest).query("SELECT TOP 1 id FROM shift_inventory_sessions WITH(UPDLOCK,HOLDLOCK) WHERE branch_id=@b AND business_date=@d AND operation_shift_code=@o AND created_by_user_id=@u AND shift_session_id IS NULL AND status='IN_PROGRESS' AND is_test=@isTest ORDER BY id DESC")).recordset[0];
-  if(!inventory){await tx.rollback();started=false;return fail(res,409,'Bạn phải kiểm và xác nhận nhận kho trước khi mở ca')} inventorySessionId=inventory.id;
+  if(!inventory&&!isTest){await tx.rollback();started=false;return fail(res,409,'Bạn phải kiểm và xác nhận nhận kho trước khi mở ca')} inventorySessionId=inventory?.id||null;
   const cash=await db.request().query("SELECT TRY_CONVERT(decimal(18,2),setting_value) AS amount FROM dbo.system_settings WHERE setting_key='DEFAULT_SHIFT_OPENING_CASH'");const openingCash=Number(cash.recordset[0]?.amount);if(!Number.isFinite(openingCash))throw new Error('Thiếu cấu hình DEFAULT_SHIFT_OPENING_CASH');
   const result=await db.request().input('branchId',sql.Int,state.employee.branchId).input('employeeId',sql.Int,state.employee.employeeId).input('scheduleId',sql.Int,state.schedule.scheduleId).input('shiftId',sql.Int,state.schedule.shiftId).input('date',sql.Date,businessDate).input('operation',sql.VarChar(10),operationShift).input('userId',sql.Int,req.user.userId).input('cash',sql.Decimal(18,2),openingCash).input('note',sql.NVarChar(500),String(req.body.note||'').trim()||null).input('isTest',sql.Bit,isTest).query("INSERT dbo.shift_sessions(branch_id,employee_id,schedule_id,shift_id,business_date,opening_cash,status,note,operation_shift_code,leader_employee_id,opened_by,is_test,updated_at) OUTPUT INSERTED.id AS shiftSessionId VALUES(@branchId,@employeeId,@scheduleId,@shiftId,@date,@cash,'OPEN',@note,@operation,@employeeId,@userId,@isTest,SYSDATETIME())");
   const id=result.recordset[0].shiftSessionId;if(inventorySessionId)await db.request().input('i',sql.BigInt,inventorySessionId).input('s',sql.Int,id).query('UPDATE shift_inventory_sessions SET shift_session_id=@s,updated_at=SYSDATETIME() WHERE id=@i AND shift_session_id IS NULL');

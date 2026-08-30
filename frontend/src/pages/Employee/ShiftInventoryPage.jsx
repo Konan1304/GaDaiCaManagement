@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { shiftInventoryApi } from '../../api/services';
+import { employeeApi, shiftInventoryApi } from '../../api/services';
 import '../../styles/shift-inventory.css';
 
 const errorText = (error) => error?.response?.data?.message || error?.message || 'Không thể tải dữ liệu kiểm kho';
@@ -15,25 +15,70 @@ const actionText = {
 
 export default function ShiftInventoryPage() {
   const navigate = useNavigate();
+  const isSandbox = import.meta.env.VITE_APP_ENV === 'sandbox';
   const [data, setData] = useState(null);
+  const [scheduleOptions, setScheduleOptions] = useState([]);
+  const [selectedScheduleId, setSelectedScheduleId] = useState('');
   const [form, setForm] = useState({});
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
-  const load = async () => {
+  const load = async (date = (isSandbox ? localStorage.getItem('sandbox-shift-inventory-date') : undefined), scheduleId = (isSandbox ? localStorage.getItem('sandbox-active-schedule-id') : undefined)) => {
     try {
       setError('');
-      const response = await shiftInventoryApi.current();
+      const response = await shiftInventoryApi.current(date ? { date, ...(scheduleId ? { scheduleId } : {}) } : undefined);
       const inventory = response.data?.inventory;
       setData(response.data);
       setForm(Object.fromEntries((inventory?.items || []).map((item) => [item.product_id, {
         quantity: inventory.status === 'RECEIVING' ? (item.opening_actual_quantity ?? '') : (item.closing_actual_quantity ?? ''),
+        imported: inventory.status === 'RECEIVING' ? Number(item.imported_quantity_in_shift || 0) : Number(item.liveImportedQuantity ?? item.imported_quantity_in_shift ?? 0),
+        exported: inventory.status === 'RECEIVING' ? Number(item.special_export_quantity_in_shift || 0) : Number(item.liveExportedQuantity ?? item.special_export_quantity_in_shift ?? 0),
         note: item.receiving_note || item.closing_note || '',
       }])));
     } catch (loadError) { setError(errorText(loadError)); }
   };
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    let active = true;
+    const initialise = async () => {
+      if (!isSandbox) return load();
+      try {
+        setError('');
+        const response = await employeeApi.attendanceTestSchedules();
+        if (!active) return;
+        const options = response.data || [];
+        setScheduleOptions(options);
+        const rememberedId = localStorage.getItem('sandbox-active-schedule-id') || localStorage.getItem('sandbox-shift-inventory-schedule-id');
+        const rememberedDate = localStorage.getItem('sandbox-shift-inventory-date') || localStorage.getItem('sandbox-operation-date');
+        const selected = options.find((item) => String(item.scheduleId) === rememberedId)
+          || options.find((item) => item.workDate === rememberedDate)
+          || options[0];
+        if (selected) {
+          setSelectedScheduleId(String(selected.scheduleId));
+          localStorage.setItem('sandbox-shift-inventory-schedule-id', String(selected.scheduleId));
+          localStorage.setItem('sandbox-shift-inventory-date', selected.workDate);
+          await load(selected.workDate, selected.scheduleId);
+        } else setData(null);
+      } catch (loadError) { if (active) setError(errorText(loadError)); }
+    };
+    initialise();
+    return () => { active = false; };
+  }, [isSandbox]);
+
+  const changeSchedule = async (scheduleId) => {
+    const selected = scheduleOptions.find((item) => String(item.scheduleId) === scheduleId);
+    if (!selected) return;
+    setSelectedScheduleId(scheduleId);
+    localStorage.setItem('sandbox-shift-inventory-schedule-id', scheduleId);
+    localStorage.setItem('sandbox-active-schedule-id', scheduleId);
+    localStorage.setItem('sandbox-shift-inventory-date', selected.workDate);
+    localStorage.setItem('sandbox-operation-date', selected.workDate);
+    setData(null);
+    await load(selected.workDate, selected.scheduleId);
+  };
+
+  const scheduleLabel = (item) => `${new Date(`${item.workDate}T00:00:00`).toLocaleDateString('vi-VN', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' })} — Ca ${item.shiftCode} (${item.startTime?.slice(0, 5)}–${item.endTime?.slice(0, 5)})`;
+  const schedulePicker = isSandbox && <section className="si-card si-schedule-picker"><div><strong>Ngày kiểm kho theo lịch làm</strong><small>Chỉ hiển thị lịch chính thức đã công bố của bạn.</small></div><select value={selectedScheduleId} onChange={(event) => changeSchedule(event.target.value)} disabled={busy || !scheduleOptions.length}><option value="">{scheduleOptions.length ? 'Chọn ngày và ca làm' : 'Không có lịch đã công bố'}</option>{scheduleOptions.map((item) => <option key={item.scheduleId} value={item.scheduleId}>{scheduleLabel(item)}</option>)}</select></section>;
 
   const inventory = data?.inventory;
   const operation = data?.operation;
@@ -42,9 +87,9 @@ export default function ShiftInventoryPage() {
   const canUpload = Boolean(inventory?.shift_session_id) && !readOnly;
   const summary = useMemo(() => ({
     mismatches: items.filter((item) => number(item.receiving_difference_quantity) !== 0).length,
-    imported: items.reduce((sum, item) => sum + number(item.imported_quantity_in_shift), 0),
-    exported: items.reduce((sum, item) => sum + number(item.special_export_quantity_in_shift), 0),
-  }), [items]);
+    imported: items.reduce((sum, item) => sum + number(inventory?.status === 'RECEIVING' ? form[item.product_id]?.imported : (item.liveImportedQuantity ?? item.imported_quantity_in_shift)), 0),
+    exported: items.reduce((sum, item) => sum + number(inventory?.status === 'RECEIVING' ? form[item.product_id]?.exported : (item.liveExportedQuantity ?? item.special_export_quantity_in_shift)), 0),
+  }), [items, form, inventory?.status]);
 
   const run = async (callback) => {
     try { setBusy(true); setError(''); const response = await callback(); setMessage(response.message || 'Đã lưu'); await load(); }
@@ -55,21 +100,26 @@ export default function ShiftInventoryPage() {
     const payload = items.map((item) => ({
       productId: item.product_id,
       ...(kind === 'receive' ? { actualQuantity: form[item.product_id]?.quantity } : { closingQuantity: form[item.product_id]?.quantity }),
+      ...(kind === 'receive' ? { importedQuantity: form[item.product_id]?.imported || 0, exportedQuantity: form[item.product_id]?.exported || 0 } : {}),
       note: form[item.product_id]?.note || '',
     }));
     return kind === 'receive' ? shiftInventoryApi.receive(inventory.id, payload) : shiftInventoryApi.close(inventory.id, { items: payload, note: '' });
   });
   const upload = (file) => file && run(() => shiftInventoryApi.uploadImage(inventory.id, file));
 
+  if (data && !operation && isSandbox) return <div className="si-page">{schedulePicker}<div className="si-empty"><h2>Chưa đủ điều kiện kiểm nhận kho</h2><p>Ngày đã chọn cần có lịch chính thức và đã chấm công vào ca.</p>{error && <p className="si-error">{error}</p>}</div></div>;
+
   if (!data && !error) return <div className="si-page"><div className="si-empty"><h2>Đang tải kiểm kho…</h2></div></div>;
   if (!operation) return <div className="si-page"><div className="si-empty"><h2>Chưa đủ điều kiện kiểm nhận kho</h2><p>Bạn cần có lịch chính thức và đã chấm công vào ca.</p>{error && <p className="si-error">{error}</p>}</div></div>;
   if (!inventory) return <div className="si-page">
+    {schedulePicker}
     <section className="si-hero"><span className="si-badge">BƯỚC 1</span><h2>Nhận kho đầu ca</h2><p>{operation.businessDate} · Ca {operation.operationShift === 'morning' ? 'sáng' : 'chiều'}</p></section>
     {error && <p className="si-error">{error}</p>}
     <section className="si-card si-onboarding"><h3>Kiểm số ca trước trước khi mở ca</h3><p>Hệ thống sẽ lấy đúng số tồn mà ca trước đã bàn giao. Bạn chỉ nhập số tự đếm, không thể sửa số của ca trước.</p><button disabled={busy} className="si-primary" onClick={() => run(() => shiftInventoryApi.start({ scheduleId: operation.scheduleId, businessDate: operation.businessDate }))}>Bắt đầu kiểm nhận kho</button></section>
   </div>;
 
   return <div className="si-page">
+    {schedulePicker}
     <section className="si-hero"><span className="si-badge">{statusText[inventory.status] || inventory.status}</span><h2>Kiểm kho ca {inventory.operation_shift_code === 'morning' ? 'sáng' : 'chiều'}</h2><p>{inventory.business_date?.slice?.(0, 10) || operation.businessDate} · {inventory.branchName}</p></section>
     {message && <p className="si-ok">{message}</p>}{error && <p className="si-error">{error}</p>}
     <div className="si-summary"><div><small>Sản phẩm</small><b>{items.length}</b></div><div><small>Chênh lệch nhận</small><b className={summary.mismatches ? 'danger' : ''}>{summary.mismatches}</b></div><div><small>Nhập trong ca</small><b>+{quantity(summary.imported)}</b></div><div><small>Xuất trong ca</small><b>-{quantity(summary.exported)}</b></div></div>
@@ -78,14 +128,16 @@ export default function ShiftInventoryPage() {
       <div className="si-table"><div className="si-row si-head"><b>Sản phẩm</b><b>ĐVT</b><b>Ca trước</b><b>Nhập</b><b>Xuất</b><b>Tồn dự kiến</b><b>Tồn thực tế</b><b>Chênh lệch</b><b>Ghi chú</b><b>Trạng thái</b></div>
         {items.map((item) => {
           const opening = inventory.status === 'RECEIVING' ? number(item.declared_handover_quantity) : number(item.opening_actual_quantity);
-          const expected = opening + number(item.imported_quantity_in_shift) - number(item.special_export_quantity_in_shift);
+          const imported = inventory.status === 'RECEIVING' ? form[item.product_id]?.imported : (item.liveImportedQuantity ?? item.imported_quantity_in_shift);
+          const exported = inventory.status === 'RECEIVING' ? form[item.product_id]?.exported : (item.liveExportedQuantity ?? item.special_export_quantity_in_shift);
+          const expected = opening + number(imported) - number(exported);
           const actual = form[item.product_id]?.quantity;
           const diff = actual === '' || actual == null ? null : number(actual) - expected;
           const savedDiff = inventory.status === 'RECEIVING' ? item.receiving_difference_quantity : (item.closing_actual_quantity == null ? null : number(item.closing_actual_quantity) - expected);
           const shownDiff = readOnly ? savedDiff : diff;
           const state = shownDiff == null ? 'Chưa kiểm' : number(shownDiff) === 0 ? 'Khớp' : 'Lệch';
           return <div className={`si-row ${state === 'Lệch' ? 'si-row-danger' : ''}`} key={item.id}>
-            <strong>{item.productName}<small>{item.productCode}</small></strong><span>{item.unitName}</span><span>{quantity(opening)}</span><span>+{quantity(item.imported_quantity_in_shift)}</span><span>-{quantity(item.special_export_quantity_in_shift)}</span><span>{quantity(expected)}</span>
+            <strong>{item.productName}<small>{item.productCode}</small></strong><span>{item.unitName}</span><span>{quantity(opening)}</span>{inventory.status === 'RECEIVING' ? <input className="si-movement-input in" type="number" min="0" step="0.001" value={form[item.product_id]?.imported ?? 0} onFocus={() => Number(form[item.product_id]?.imported || 0) === 0 && setForm({ ...form, [item.product_id]: { ...form[item.product_id], imported: '' } })} onBlur={() => form[item.product_id]?.imported === '' && setForm({ ...form, [item.product_id]: { ...form[item.product_id], imported: 0 } })} onChange={(event) => setForm({ ...form, [item.product_id]: { ...form[item.product_id], imported: event.target.value } })}/> : <span>+{quantity(imported)}</span>}{inventory.status === 'RECEIVING' ? <input className="si-movement-input out" type="number" min="0" step="0.001" value={form[item.product_id]?.exported ?? 0} onFocus={() => Number(form[item.product_id]?.exported || 0) === 0 && setForm({ ...form, [item.product_id]: { ...form[item.product_id], exported: '' } })} onBlur={() => form[item.product_id]?.exported === '' && setForm({ ...form, [item.product_id]: { ...form[item.product_id], exported: 0 } })} onChange={(event) => setForm({ ...form, [item.product_id]: { ...form[item.product_id], exported: event.target.value } })}/> : <span>-{quantity(exported)}</span>}<span>{quantity(expected)}</span>
             {readOnly ? <span>{quantity(item.closing_actual_quantity ?? item.opening_actual_quantity)}</span> : <input type="number" min="0" step="0.001" value={actual ?? ''} onChange={(event) => setForm({ ...form, [item.product_id]: { ...form[item.product_id], quantity: event.target.value } })}/>}<b className={state === 'Lệch' ? 'danger' : ''}>{shownDiff == null ? '—' : quantity(shownDiff)}</b>
             {readOnly ? <span>{item.receiving_note || item.closing_note || '—'}</span> : <input value={form[item.product_id]?.note || ''} placeholder={state === 'Lệch' ? 'Bắt buộc ghi lý do' : 'Ghi chú'} onChange={(event) => setForm({ ...form, [item.product_id]: { ...form[item.product_id], note: event.target.value } })}/>}<span className={`si-pill ${state === 'Lệch' ? 'danger' : state === 'Khớp' ? 'ok' : ''}`}>{state}</span>
           </div>;
