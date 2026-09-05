@@ -2,7 +2,7 @@ require("dotenv").config();
 const fs=require("fs");
 const path=require("path");
 const {sql,getPool}=require("../config/db");
-const ADMIN_EMAIL="admin@daiga.vn";
+const ADMIN_EMAIL="admin@gdc.vn";
 const confirmed=String(process.env.CONFIRM_RESET_EMPLOYEES||"").toLowerCase()==="true";
 
 (async()=>{

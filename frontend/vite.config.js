@@ -5,5 +5,7 @@ export default defineConfig({
   plugins: [react()],
   server: {
     host: "0.0.0.0",
+    allowedHosts: ["LAPTOP-RLFS7GV5"],
+    strictPort: true,
   },
 });

@@ -17,4 +17,28 @@
 .operation-detail-meta .balanced { background: #e9f8ef; color: #087a49; }
 .operation-detail-meta .difference { background: #fff0ed; color: #bd3024; }
 .operation-detail-modal > footer { display: flex; justify-content: flex-end; padding: 16px 24px; border-top: 1px solid #eee; }
-@media (max-width: 650px) { .operation-detail-payments { grid-template-columns: 1fr 1fr; } .operation-detail-meta { grid-template-columns: 1fr 1fr; } }
+.operation-detail-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 18px 24px 8px; padding: 5px; border-radius: 14px; background: #f1efea; }
+.operation-detail-tabs button { display: flex; justify-content: space-between; align-items: center; min-height: 52px; padding: 10px 14px; border: 0; border-radius: 10px; background: transparent; cursor: pointer; }
+.operation-detail-tabs button.active { background: #ffbc00; box-shadow: 0 5px 14px #9b720030; }
+.operation-detail-tabs button small { font-weight: 800; }
+.operation-detail-panel { margin: 0 0 6px; }
+.operation-detail-total.cash-focus { background: #ffbc00; border-color: #d79600; }
+.operation-detail-total.cash-focus b { color: #18130a; }
+.operation-detail-meta.cash-meta { grid-template-columns: repeat(3,1fr); }
+.operation-detail-meta.cash-meta > div { min-height: 96px; align-content: center; }
+.operation-detail-meta.cash-meta b { font-size: 24px; }
+.operation-detail-meta.cash-meta .cash-main { background: #fff8d7; border-color: #efb800; }
+.operation-detail-meta.cash-meta .cash-main b { color: #8a6200; }
+.operation-detail-meta.cash-meta .cash-expense { background: #fff3f2; border-color: #efb0aa; }
+.operation-detail-meta.cash-meta .cash-expense b { color: #b42318; }
+.operation-detail-total.cash-sales-total { min-height: 76px; background: #ffbc00; border-color: #d79600; }
+.operation-detail-total.cash-sales-total span { font-size: 16px; font-weight: 900; }
+.operation-detail-total.cash-sales-total b { color: #18130a; font-size: 30px; }
+.operation-detail-images { margin: 12px 24px 20px; padding: 16px; border: 1px solid #eee; border-radius: 13px; }
+.operation-detail-images h3 { margin: 0 0 12px; }
+.operation-detail-images > div { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; }
+.operation-detail-images a { overflow: hidden; border: 1px solid #e5dccd; border-radius: 11px; color: #18130a; text-decoration: none; }
+.operation-detail-images img { display: block; width: 100%; height: 190px; object-fit: contain; background: #f5f3ef; }
+.operation-detail-images a span { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 9px; font-weight: 800; }
+.operation-detail-images > button { width: 100%; margin-top: 14px; }
+@media (max-width: 650px) { .operation-detail-payments { grid-template-columns: 1fr 1fr; } .operation-detail-meta, .operation-detail-meta.cash-meta { grid-template-columns: 1fr 1fr; } }

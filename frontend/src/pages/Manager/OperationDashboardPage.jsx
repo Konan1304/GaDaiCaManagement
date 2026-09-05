@@ -1,28 +1,28 @@
 import { useEffect, useMemo, useState } from "react";
 import { FiChevronLeft, FiClock, FiDownload, FiEye, FiGitBranch, FiRefreshCw, FiSearch, FiUsers, FiX } from "react-icons/fi";
-import { managerEmployeeApi, managerOperationApi } from "../../api/services";
+import { managerEmployeeApi, managerOperationApi, operationApi } from "../../api/services";
 import "../../styles/operation-detail.css";
 
 const cash = value => `${Number(value || 0).toLocaleString("vi-VN")}đ`;
 const shiftName = value => value === "morning" ? "CA SÁNG" : "CA TỐI";
 
 function DetailModal({ report, onClose }) {
+  const [detailTab,setDetailTab]=useState("cash");
+  const [attachments,setAttachments]=useState([]),[attachmentError,setAttachmentError]=useState("");
+  useEffect(()=>{if(!report?.shiftSessionId)return;let active=true,urls=[];setAttachmentError("");operationApi.attachments(report.shiftSessionId).then(async result=>{const items=Array.isArray(result?.data)?result.data:[];const loaded=await Promise.all(items.map(async item=>{const blob=await operationApi.attachmentFile(report.shiftSessionId,item.attachmentId),url=URL.createObjectURL(blob);urls.push(url);return {...item,url}}));if(active)setAttachments(loaded)}).catch(error=>active&&setAttachmentError(error.response?.data?.message||"Không xem được ảnh chứng từ"));return()=>{active=false;urls.forEach(URL.revokeObjectURL)}},[report?.shiftSessionId]);
   if (!report) return null;
+  async function downloadShiftPdf(){const blob=await managerOperationApi.shiftPdf(report.shiftSessionId),url=URL.createObjectURL(blob),anchor=document.createElement("a");anchor.href=url;anchor.download=`bao-cao-ca-${report.businessDate}.pdf`;anchor.click();URL.revokeObjectURL(url)}
   const payments = [
-    ["Tiền mặt", report.cashRevenue], ["Be", report.beRevenue], ["Grab", report.grabRevenue],
+    ["Be", report.beRevenue], ["Grab", report.grabRevenue],
     ["ShopeeFood", report.shopeefoodRevenue], ["MPOS", report.mposRevenue], ["Xanh SM", report.xanhSmRevenue],
   ];
   return <div className="operation-detail-backdrop" onMouseDown={onClose}>
     <section className="operation-detail-modal" onMouseDown={event => event.stopPropagation()}>
       <header><div><small>CHI TIẾT BÁO CÁO ĐÃ KẾT CA</small><h2>{shiftName(report.operationShift)} · {report.businessDate}</h2><p>Người báo cáo: <b>{report.leaderName}</b></p></div><button onClick={onClose} aria-label="Đóng"><FiX /></button></header>
-      <div className="operation-detail-payments">{payments.map(([label, value]) => <div key={label}><small>{label}</small><b>{cash(value)}</b></div>)}</div>
-      <div className="operation-detail-total"><span>Tổng thanh toán</span><b>{cash(report.totalRevenue)}</b></div>
-      <div className="operation-detail-meta">
-        <div><small>Đơn hủy</small><b>{Number(report.orderCount || 0).toLocaleString("vi-VN")} đơn</b></div>
-        <div><small>Tiền cần nộp</small><b>{cash(report.cashToDeposit)}</b></div>
-        <div className={Number(report.differenceAmount) === 0 ? "balanced" : "difference"}><small>Chênh lệch quỹ</small><b>{cash(report.differenceAmount)}</b></div>
-        <div><small>Ảnh chứng từ</small><b>{report.attachmentCount || 0} ảnh</b></div>
-      </div>
+      <div className="operation-detail-tabs"><button className={detailTab==="cash"?"active":""} onClick={()=>setDetailTab("cash")}><b>Tiền mặt</b><small>{cash(report.cashRevenue)}</small></button><button className={detailTab==="pos"?"active":""} onClick={()=>setDetailTab("pos")}><b>Máy POS</b><small>{cash(Number(report.totalRevenue||0)-Number(report.cashRevenue||0))}</small></button></div>
+      {detailTab==="cash"?<div className="operation-detail-panel"><div className="operation-detail-meta cash-meta"><div className="cash-main"><small>Tiền trong két</small><b>{cash(report.cashRevenue)}</b></div><div><small>Quỹ đầu ca</small><b>{cash(report.openingCash)}</b></div><div className="cash-expense"><small>Chi phí phát sinh</small><b>{cash(report.cashExpense)}</b></div></div><div className="operation-detail-total cash-sales-total"><span>Tổng bán hàng</span><b>{cash(report.cashRevenue)}</b></div></div>:<div className="operation-detail-panel"><div className="operation-detail-payments">{payments.map(([label,value])=><div key={label}><small>{label}</small><b>{cash(value)}</b></div>)}</div><div className="operation-detail-total"><span>Tổng doanh thu máy POS</span><b>{cash(Number(report.totalRevenue||0)-Number(report.cashRevenue||0))}</b></div><div className="operation-detail-meta"><div><small>Đơn hủy</small><b>{Number(report.orderCount||0).toLocaleString("vi-VN")} đơn</b></div></div><div className="operation-detail-total"><span>Tổng doanh thu POS + tiền mặt</span><b>{cash(report.totalRevenue)}</b></div></div>}
+      <section className="operation-detail-images"><h3>Ảnh POS/kết ca ({attachments.length})</h3>{attachmentError&&<p>{attachmentError}</p>}<div>{attachments.map(item=><a key={item.attachmentId} href={item.url} target="_blank" rel="noreferrer"><img src={item.url} alt={item.originalName}/><span><FiEye/> Xem ảnh</span></a>)}</div><button className="btn btn-yellow" onClick={downloadShiftPdf}><FiDownload/> Xuất PDF</button></section>
+      {report.note&&<div className="operation-detail-total"><span>Ghi chú cuối ca</span><b>{report.note}</b></div>}
       <footer><button className="btn btn-dark" onClick={onClose}>Đóng chi tiết</button></footer>
     </section>
   </div>;

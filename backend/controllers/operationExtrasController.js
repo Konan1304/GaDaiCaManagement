@@ -31,7 +31,7 @@ async function cashPut(req,res,next){
 
 async function attachments(req,res,next){try{
   const isTest=isTestEnv(),p=await getPool(),s=await state(p,req.user.userId,+req.params.id);
-  if(!s.view)return fail(res,s.session?403:404,"Không có quyền xem ảnh");
+  if(!s.view&&req.user.role!=="admin")return fail(res,s.session?403:404,"Không có quyền xem ảnh");
   const r=await p.request().input("id",sql.Int,s.session.id).input("isTest",sql.Bit,isTest).query("SELECT id attachmentId,attachment_type attachmentType,original_name originalName,mime_type mimeType,file_size fileSize,created_at createdAt FROM operation_attachments WHERE shift_session_id=@id AND is_deleted=0 AND is_test=@isTest ORDER BY id DESC");
   res.json({success:true,data:r.recordset})
 }catch(e){next(e)}}

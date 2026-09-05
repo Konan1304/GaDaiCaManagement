@@ -5,18 +5,18 @@ const {sql,getPool}=require("../config/db");
 const IMPORT_TAG="JULY_2026_EXCEL_TEST";
 const DEFAULT_PASSWORD="123456";
 const people=[
-  {name:"Vũ Thị Ngọc Bích",code:"TESTJULY_NB",email:"testjuly.ngocbich@daiga.vn",aliases:["vu thi ngoc bich","ngoc bich"]},
-  {name:"Anh Kiệt",code:"TESTJULY_AK",email:"testjuly.anhkiet@daiga.vn",aliases:["anh kiet"]},
-  {name:"Thiên Ân",code:"TESTJULY_TA",email:"testjuly.thienan@daiga.vn",aliases:["thien an"]},
-  {name:"Nguyễn Duy Đức",code:"TESTJULY_DD",email:"testjuly.duyduc@daiga.vn",aliases:["nguyen duy duc","duc"]},
-  {name:"Kỳ Anh",code:"TESTJULY_KA",email:"testjuly.kyanh@daiga.vn",aliases:["ky anh"]},
-  {name:"Thái Dương",code:"TESTJULY_TD",email:"testjuly.thaiduong@daiga.vn",aliases:["le van thai duong","thai duong"]},
-  {name:"An",code:"TESTJULY_AN",email:"testjuly.an@daiga.vn",aliases:["an"]},
-  {name:"Mai Trinh",code:"TESTJULY_MT",email:"testjuly.maitrinh@daiga.vn",aliases:["mai trinh"]},
-  {name:"Quốc Thái",code:"TESTJULY_QT",email:"testjuly.quocthai@daiga.vn",aliases:["quoc thai"]},
-  {name:"Phương Trang",code:"TESTJULY_PT",email:"testjuly.phuongtrang@daiga.vn",aliases:["phuong trang"]},
-  {name:"Cường",code:"TESTJULY_C",email:"testjuly.cuong@daiga.vn",aliases:["cuong"]},
-  {name:"Xuân Mai",code:"TESTJULY_XM",email:"testjuly.xuanmai@daiga.vn",aliases:["xuan mai"]},
+  {name:"Vũ Thị Ngọc Bích",code:"TESTJULY_NB",email:"testjuly.ngocbich@gdc.vn",aliases:["vu thi ngoc bich","ngoc bich"]},
+  {name:"Anh Kiệt",code:"TESTJULY_AK",email:"testjuly.anhkiet@gdc.vn",aliases:["anh kiet"]},
+  {name:"Thiên Ân",code:"TESTJULY_TA",email:"testjuly.thienan@gdc.vn",aliases:["thien an"]},
+  {name:"Nguyễn Duy Đức",code:"TESTJULY_DD",email:"testjuly.duyduc@gdc.vn",aliases:["nguyen duy duc","duc"]},
+  {name:"Kỳ Anh",code:"TESTJULY_KA",email:"testjuly.kyanh@gdc.vn",aliases:["ky anh"]},
+  {name:"Thái Dương",code:"TESTJULY_TD",email:"testjuly.thaiduong@gdc.vn",aliases:["le van thai duong","thai duong"]},
+  {name:"An",code:"TESTJULY_AN",email:"testjuly.an@gdc.vn",aliases:["an"]},
+  {name:"Mai Trinh",code:"TESTJULY_MT",email:"testjuly.maitrinh@gdc.vn",aliases:["mai trinh"]},
+  {name:"Quốc Thái",code:"TESTJULY_QT",email:"testjuly.quocthai@gdc.vn",aliases:["quoc thai"]},
+  {name:"Phương Trang",code:"TESTJULY_PT",email:"testjuly.phuongtrang@gdc.vn",aliases:["phuong trang"]},
+  {name:"Cường",code:"TESTJULY_C",email:"testjuly.cuong@gdc.vn",aliases:["cuong"]},
+  {name:"Xuân Mai",code:"TESTJULY_XM",email:"testjuly.xuanmai@gdc.vn",aliases:["xuan mai"]},
 ];
 const normalize=value=>String(value||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/đ/g,"d").replace(/Đ/g,"D").toLowerCase().replace(/\s+/g," ").trim();
 
@@ -37,11 +37,11 @@ const normalize=value=>String(value||"").normalize("NFD").replace(/[\u0300-\u036
       SELECT TOP 1 id AS roleId FROM roles WHERE role_code='employee';
       SELECT TOP 1 id AS branchId FROM branches WHERE branch_name LIKE N'%Vạn Kiếp%' AND status='active' ORDER BY id;
       SELECT TOP 1 id AS positionId FROM positions
-        WHERE position_code IN ('SERVICE','STAFF') OR position_name LIKE N'%phục vụ%' ORDER BY id;
+        WHERE position_code='COUNTER' OR position_name=N'Nhân viên quầy' ORDER BY id;
       SELECT e.id AS employeeId,e.employee_code AS employeeCode,e.user_id AS userId,u.full_name AS fullName,u.email
       FROM employees e JOIN users u ON u.id=e.user_id`);
     const roleId=refs.recordsets[0][0]?.roleId,branchId=refs.recordsets[1][0]?.branchId,positionId=refs.recordsets[2][0]?.positionId;
-    if(!roleId||!branchId||!positionId)throw new Error("Thiếu role employee, chi nhánh Vạn Kiếp hoặc vị trí Nhân viên phục vụ.");
+    if(!roleId||!branchId||!positionId)throw new Error("Thiếu role employee, chi nhánh Vạn Kiếp hoặc vị trí Nhân viên quầy.");
     const existing=refs.recordsets[3];
     for(const person of people){
       const found=existing.find(item=>person.aliases.includes(normalize(item.fullName)));

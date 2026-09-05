@@ -1,7 +1,7 @@
 const {sql,getPool}=require("../config/db");
 const {employeeFromJwt}=require("../services/shiftEligibilityService");
 const {record}=require("../services/shiftEventService");
-const DENOMINATIONS=[500000,200000,100000,50000,20000,10000,5000,2000,1000],moneyFields=["cashRevenue","grabRevenue","shopeefoodRevenue","beRevenue","mposRevenue","xanhSmRevenue","actualCash"],countFields=["orderCount"];
+const DENOMINATIONS=[500000,200000,100000,50000,20000,10000,5000,2000,1000],moneyFields=["cashRevenue","grabRevenue","shopeefoodRevenue","beRevenue","mposRevenue","xanhSmRevenue","cashExpense","actualCash"],countFields=["orderCount"];
 const fail=(res,status,message,data)=>res.status(status).json({success:false,message,data}),executor=tx=>({request:()=>new sql.Request(tx)});
 const isTestEnv=()=>(process.env.APP_ENV==='sandbox'?1:0);
 
@@ -16,20 +16,21 @@ function normalize(body){
   const data={};
   for(const key of moneyFields){const v=Number(body[key]??0);if(!Number.isFinite(v)||v<0)return null;data[key]=Math.round(v*100)/100}
   for(const key of countFields){const v=Number(body[key]??0);if(!Number.isInteger(v)||v<0)return null;data[key]=v}
-  Object.assign(data,{grossSales:0,netSales:0,discountAmount:0,otherRevenue:0,cashExpense:0,otherCashIncome:0,customerCount:0});
+  Object.assign(data,{grossSales:0,netSales:0,discountAmount:0,otherRevenue:0,otherCashIncome:0,customerCount:0});
   data.note=String(body.note||"").trim().slice(0,1000);
   data.version=body.version==null?null:Number(body.version);
   return data;
 }
 
 async function totals(ex,id,session,payload){
-  const actualCash=payload.actualCash,totalRevenue=payload.cashRevenue+payload.grabRevenue+payload.shopeefoodRevenue+payload.beRevenue+payload.mposRevenue+payload.xanhSmRevenue,expectedCash=Number(session.openingCash);
-  return {actualCash,totalRevenue,expectedCash,differenceAmount:actualCash-expectedCash,cashToDeposit:payload.cashRevenue};
+  const actualCash=payload.actualCash,totalRevenue=payload.cashRevenue+payload.grabRevenue+payload.shopeefoodRevenue+payload.beRevenue+payload.mposRevenue+payload.xanhSmRevenue;
+  const expectedCash=Number(session.openingCash)+payload.cashRevenue-payload.cashExpense;
+  return {actualCash,totalRevenue,totalAfterExpense:totalRevenue-payload.cashExpense,expectedCash,differenceAmount:actualCash-expectedCash,cashToDeposit:Math.max(0,payload.cashRevenue-payload.cashExpense)};
 }
 
 async function read(ex,id){
   const isTest=isTestEnv();
-  const r=await ex.request().input("id",sql.Int,id).input("isTest",sql.Bit,isTest).query(`SELECT TOP 1 id reportId,shift_session_id shiftSessionId,cash_revenue cashRevenue,grab_revenue grabRevenue,shopeefood_revenue shopeefoodRevenue,be_revenue beRevenue,mpos_revenue mposRevenue,xanh_sm_revenue xanhSmRevenue,order_count orderCount,total_revenue totalRevenue,expected_cash expectedCash,actual_cash actualCash,difference_amount differenceAmount,cash_to_deposit cashToDeposit,note,status,submitted_at submittedAt,version,updated_at updatedAt FROM shift_closing_reports WHERE shift_session_id=@id AND is_test=@isTest;SELECT denomination,quantity,subtotal FROM shift_cash_counts WHERE shift_session_id=@id AND is_test=@isTest ORDER BY denomination DESC`);
+  const r=await ex.request().input("id",sql.Int,id).input("isTest",sql.Bit,isTest).query(`SELECT TOP 1 id reportId,shift_session_id shiftSessionId,cash_revenue cashRevenue,grab_revenue grabRevenue,shopeefood_revenue shopeefoodRevenue,be_revenue beRevenue,mpos_revenue mposRevenue,xanh_sm_revenue xanhSmRevenue,cash_expense cashExpense,order_count orderCount,total_revenue totalRevenue,expected_cash expectedCash,actual_cash actualCash,difference_amount differenceAmount,cash_to_deposit cashToDeposit,note,status,submitted_at submittedAt,version,updated_at updatedAt FROM shift_closing_reports WHERE shift_session_id=@id AND is_test=@isTest;SELECT denomination,quantity,subtotal FROM shift_cash_counts WHERE shift_session_id=@id AND is_test=@isTest ORDER BY denomination DESC`);
   const report=r.recordsets[0][0]||null;
   if(report)report.denominations=Object.fromEntries(r.recordsets[1].map(x=>[x.denomination,x.quantity]));
   return report;

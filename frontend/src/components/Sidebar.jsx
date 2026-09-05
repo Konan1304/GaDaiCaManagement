@@ -1,3 +1,4 @@
+import {useState} from "react";
 import {NavLink} from "react-router-dom";
 import {FiBarChart2,FiBell,FiBox,FiCalendar,FiClipboard,FiClock,FiDollarSign,FiGrid,FiLogOut,FiMessageCircle,FiPackage,FiPlusSquare,FiSettings,FiTag,FiUsers,FiX} from "react-icons/fi";
 
@@ -29,13 +30,13 @@ const menuGroups=[
   ]},
 ];
 
-export default function Sidebar({open,onClose,onLogout,user}){
-  return <aside className={`sidebar ${open?"open":""}`}>
-    <div className="brand"><span className="brand-mark">GĐC</span><div><strong>GÀ ĐẠI CA</strong><small>MANAGEMENT</small></div><button className="icon-btn mobile-close" onClick={onClose}><FiX/></button></div>
+export default function Sidebar({open,collapsed,onToggleCollapse,onClose,onLogout,user}){
+  const [accountOpen,setAccountOpen]=useState(false);
+  return <aside className={`sidebar ${open?"open":""} ${collapsed?"collapsed":""}`}>
+    <div className="sidebar-user sidebar-user-top"><button type="button" className="avatar admin-brand-avatar sidebar-logo-toggle" title={collapsed?"Mở thanh menu":"Thu gọn thanh menu"} aria-label={collapsed?"Mở thanh menu":"Thu gọn thanh menu"} onClick={onToggleCollapse}><img src="/admin-avatar.png" alt="Gà Đại Ca"/></button><button type="button" className={`sidebar-account-name ${accountOpen?"open":""}`} onClick={()=>setAccountOpen(value=>!value)} aria-expanded={accountOpen}><strong>{user?.name||"Quốc Anh"}</strong><small>{user?.position||"Quản lý cửa hàng"}</small></button><div className={`sidebar-account-actions ${accountOpen?"open":""}`}><NavLink className="sidebar-logout" title="Chấm công cá nhân" to="/employee/attendance" onClick={()=>{setAccountOpen(false);onClose()}}><FiClock/><span>Chấm công cá nhân</span></NavLink><button className="sidebar-logout" title="Đăng xuất" onClick={onLogout}><FiLogOut/><span>Đăng xuất</span></button></div><button className="icon-btn mobile-close sidebar-mobile-close" onClick={onClose}><FiX/></button></div>
     <nav className="sidebar-nav">{menuGroups.map(group=><section className="sidebar-menu-group" key={group.title}>
       <h2>{group.title}</h2>
-      <div>{group.items.map(([to,label,Icon])=><NavLink key={to} to={to} onClick={onClose} className={({isActive})=>`nav-link ${isActive?"active":""}`}><Icon/>{label}</NavLink>)}</div>
+      <div>{group.items.map(([to,label,Icon])=><NavLink key={to} to={to} title={collapsed?label:undefined} onClick={onClose} className={({isActive})=>`nav-link ${isActive?"active":""}`}><Icon/><span>{label}</span></NavLink>)}</div>
     </section>)}</nav>
-    <div className="sidebar-user"><div className="avatar admin-brand-avatar"><img src="/admin-avatar.png" alt="Gà Đại Ca"/></div><div><strong>{user?.name||"Quốc Anh"}</strong><small>{user?.position||"Quản lý cửa hàng"}</small></div><NavLink className="sidebar-logout" title="Chấm công cá nhân" aria-label="Chấm công cá nhân" to="/employee/attendance" onClick={onClose}><FiClock/></NavLink><button className="sidebar-logout" title="Đăng xuất" onClick={onLogout}><FiLogOut/></button></div>
   </aside>;
 }

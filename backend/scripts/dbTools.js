@@ -18,8 +18,18 @@ const migrationOrder = [
   "20260731_operation_shift_reporting.sql",
   "20260801_operation_suite.sql",
   "20260802_shift_report_xanh_sm.sql",
+  "20260831_supplier_purchase_orders.sql",
+  "20260831_employee_purchase_receipts.sql",
   "20260725_july_attendance_test_batch.sql",
   "20260815_shift_inventory_production.sql",
+  "20260901_shift_session_environment_key.sql",
+  "20260902_employee_personal_profile.sql",
+  "20260903_update_email_domain_to_gdc.sql",
+  "20260903_employee_profile_update_lock.sql",
+  "20260903_standardize_employee_positions.sql",
+  "20260903_employee_employment_type.sql",
+  "20260905_branch_operational_reports.sql",
+  "20260905_chat_custom_channels.sql",
 ];
 const sandboxMigrationOrder = ["20260806_shift_inventory_sandbox.sql"];
 

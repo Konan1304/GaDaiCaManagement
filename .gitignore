@@ -9,3 +9,6 @@ backend/.env.sandbox
 frontend/.env.production
 frontend/.env.sandbox
 frontend/dist-sandbox/
+database/20260905_import_three_branches_employees.sql
+database/lich-lam-thang-8.xlsx
+database/kho-import.xlsx

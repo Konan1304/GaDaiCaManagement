@@ -3,7 +3,7 @@ const iso=value=>value instanceof Date
  : String(value||"").slice(0,10);
 const days=["CN","T2","T3","T4","T5","T6","T7"];
 export const registrationChoices=[
- {code:"",label:"Chưa chọn"},{code:"OFF",label:"Nghỉ"},{code:"FULL",label:"FULL — Rảnh cả ngày"},
+ {code:"",label:"Không đăng ký (nghỉ)"},{code:"FULL",label:"FULL — Rảnh cả ngày"},
  {code:"A",label:"A — 08:00–16:00"},{code:"B",label:"B — 16:00–23:00"},
  {code:"P1",label:"P1 — 08:00–12:00"},{code:"P2",label:"P2 — 12:00–17:00"},{code:"P3",label:"P3 — 17:00–23:00"}
 ];
@@ -16,7 +16,8 @@ export default function ShiftRegistrationTable({dates,employees,currentEmployeeI
    return <tr key={employee.employeeId} className={mine?"is-me":""}><th><b>{employee.fullName}</b>{mine&&<em>Bạn</em>}<small>{employee.employeeCode} · {employee.positionName}</small><small className={`registration-row-state ${registered?"registered":"pending"}`}>{registered?"Đã đăng ký":"Chưa đăng ký"}</small></th>{dates.map(date=>{
     const key=iso(date);
     // Sau khi lưu/refetch, luôn dùng dữ liệu database làm fallback để dòng của chính nhân viên không bị trắng.
-    const code=mine&&editable?(values[key]??employee.registrations?.[key]??""):(employee.registrations?.[key]||"");
+    const stored=employee.registrations?.[key]||"";
+    const code=mine&&editable?(values[key]??(stored==="OFF"?"":stored)):stored;
     return <td key={key} className={`registration-cell code-${(code||"empty").toLowerCase()}`}>{mine&&editable?<select aria-label={`${employee.fullName} ${key}`} value={code} onChange={event=>onChange(key,event.target.value)}>{registrationChoices.map(choice=><option key={choice.code||"empty"} value={choice.code}>{choice.label}</option>)}</select>:<span>{code==="OFF"?"Nghỉ":code||"—"}</span>}</td>
    })}</tr>
   })}</tbody></table></div>

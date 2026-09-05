@@ -4,6 +4,7 @@ import { managerEmployeeApi, managerOperationApi } from "../../api/services";
 import "../../styles/report-analytics.css";
 import "../../styles/report-overview.css";
 import "../../styles/report-comparison.css";
+import OperationalReports from "./OperationalReports";
 
 const money = value => `${Number(value || 0).toLocaleString("vi-VN")}đ`;
 const total = (items, field = "totalRevenue") => items.reduce((sum, item) => sum + Number(item[field] || 0), 0);
@@ -34,7 +35,7 @@ function MonthlyComparisonChart({ rows, month, previous }) {
   </section>;
 }
 
-export default function ReportsPage() {
+function RevenueReportsPage() {
   const [month, setMonth] = useState("2026-06"), year = Number(month.slice(0, 4));
   const [branches, setBranches] = useState([]), [branchId, setBranchId] = useState("");
   const [compareMode, setCompareMode] = useState("month"), [comparisonBranchId, setComparisonBranchId] = useState("");
@@ -67,4 +68,9 @@ export default function ReportsPage() {
       <section className="card report-month-table comparison-table"><header><div><small>BẢNG THỐNG KÊ TỔNG HỢP</small><h2>{compareMode==="month"?"So sánh chi nhánh theo tháng":"So sánh chi nhánh theo năm"}</h2></div><FiBarChart2/></header><div className="table-wrap"><table><thead>{compareMode==="month"?<tr><th>Chi nhánh</th><th>{monthLabel(month)}</th><th>{monthLabel(previousMonth(month))}</th><th>Chênh lệch</th><th>Tăng trưởng</th><th>Số ca</th><th></th></tr>:<tr><th>Chi nhánh</th><th>Năm {year}</th><th>Năm {year-1}</th><th>Chênh lệch</th><th>Tăng trưởng</th><th>Số ca</th><th></th></tr>}</thead><tbody>{comparisonRows.map(branch=>compareMode==="month"?<tr key={branch.id}><td><b>{branch.branchName}</b><small>{branch.branchCode}</small></td><td><strong>{money(branch.revenue)}</strong></td><td>{money(branch.previousRevenue)}</td><td>{money(branch.revenue-branch.previousRevenue)}</td><td><GrowthBadge value={branch.monthGrowth}/></td><td>{branch.items.length}</td><td><button onClick={()=>setBranchId(String(branch.id))}>Chi tiết</button></td></tr>:<tr key={branch.id}><td><b>{branch.branchName}</b><small>{branch.branchCode}</small></td><td><strong>{money(branch.yearRevenue)}</strong></td><td>{money(branch.previousYearRevenue)}</td><td>{money(branch.yearRevenue-branch.previousYearRevenue)}</td><td><GrowthBadge value={branch.yearGrowth}/></td><td>{branch.items.length}</td><td><button onClick={()=>setBranchId(String(branch.id))}>Chi tiết</button></td></tr>)}</tbody></table></div></section>
     </>}
   </div>;
+}
+
+export default function ReportsPage(){
+  const [tab,setTab]=useState('REVENUE');
+  return <><nav className="report-type-tabs"><button className={tab==='REVENUE'?'active':''} onClick={()=>setTab('REVENUE')}>Doanh thu</button><button className={tab==='HYGIENE'?'active':''} onClick={()=>setTab('HYGIENE')}>Vệ sinh</button><button className={tab==='GOODS'?'active':''} onClick={()=>setTab('GOODS')}>Hàng hóa</button></nav>{tab==='REVENUE'?<RevenueReportsPage/>:<OperationalReports type={tab}/>}</>;
 }

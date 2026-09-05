@@ -39,7 +39,7 @@ const ledgerCte = `WITH movements AS (
  FROM products p INNER JOIN units u ON u.id=p.unit_id
  LEFT JOIN branch_inventories bi ON bi.product_id=p.id AND bi.branch_id=@branchId
  LEFT JOIN movements m ON m.product_id=p.id
- WHERE p.status<>'inactive' AND (bi.id IS NOT NULL OR m.product_id IS NOT NULL)
+ WHERE COALESCE(p.status,'active')<>'inactive' AND (bi.id IS NOT NULL OR m.product_id IS NOT NULL)
 ), calculated AS (
  SELECT *,current_quantity-after_net closing_quantity,
   current_quantity-after_net-inbound+outbound opening_quantity FROM stock
@@ -99,12 +99,12 @@ async function transactions(req,res,next) {
     const branchId=positiveInt(req.query.branchId,null);
     if(!branchId)return res.status(400).json({success:false,message:"Chi nhánh không hợp lệ"});
     const page=positiveInt(req.query.page,1),limit=Math.min(positiveInt(req.query.limit,30),100);
-    const search=String(req.query.search||"").trim();
+    const search=String(req.query.search||"").trim(),direction=["in","out"].includes(req.query.direction)?req.query.direction:"all";
     const pool=await getPool();
     const exists=(await pool.request().input("id",sql.Int,branchId).query("SELECT id FROM branches WHERE id=@id AND status='active'")).recordset[0];
     if(!exists)return res.status(404).json({success:false,message:"Không tìm thấy chi nhánh"});
     const result=await bindRange(pool.request(),branchId,range)
-      .input("search",sql.NVarChar(200),`%${search}%`).input("offset",sql.Int,(page-1)*limit).input("limit",sql.Int,limit)
+      .input("search",sql.NVarChar(200),`%${search}%`).input("direction",sql.VarChar(10),direction).input("offset",sql.Int,(page-1)*limit).input("limit",sql.Int,limit)
       .query(`SELECT COUNT(*) OVER() totalRows,it.id,it.created_at transactionTime,p.product_code productCode,
        p.product_name productName,it.transaction_type transactionType,it.quantity,u.unit_name unitName,
        b.branch_name branchName,COALESCE(usr.full_name,N'Hệ thống') performedBy,it.reference_type referenceType,
@@ -114,6 +114,7 @@ async function transactions(req,res,next) {
        LEFT JOIN users usr ON usr.id=it.created_by
        WHERE it.branch_id=@branchId AND it.created_at>=@dateFrom AND it.created_at<DATEADD(day,1,@dateTo)
        AND (@search='%%' OR p.product_name LIKE @search OR p.product_code LIKE @search)
+       AND (@direction='all' OR (@direction='in' AND it.transaction_type IN('import','adjustment_in','transfer_in')) OR (@direction='out' AND it.transaction_type NOT IN('import','adjustment_in','transfer_in')))
        ORDER BY it.created_at DESC,it.id DESC OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY`);
     const items=result.recordset,total=Number(items[0]?.totalRows||0);items.forEach(x=>delete x.totalRows);
     return res.json({success:true,data:{items,pagination:{page,limit,total,totalPages:Math.max(1,Math.ceil(total/limit))}}});

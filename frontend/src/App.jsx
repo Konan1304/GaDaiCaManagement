@@ -37,6 +37,7 @@ import InternalChatPage from "./pages/Shared/InternalChatPage";
 import NotificationCenterPage from "./pages/Shared/NotificationCenterPage";
 import ShiftInventoryPage from "./pages/Employee/ShiftInventoryPage";
 import ShiftInventoryAdminPage from "./pages/Manager/ShiftInventoryAdminPage";
+import ReceiveGoodsPage from "./pages/Employee/ReceiveGoodsPage";
 
 const isSandbox=import.meta.env.VITE_APP_ENV==="sandbox";
 
@@ -95,6 +96,7 @@ export default function App() {
         <Route path="payroll" element={<EmployeePayrollPage />} />
         <Route path="chat" element={<InternalChatPage />} />
         <Route path="shift-inventory" element={<ShiftInventoryPage />} />
+        <Route path="receive-goods" element={<ReceiveGoodsPage />} />
         <Route path="notification-center" element={<NotificationCenterPage />} />
       </Route>
     </Route>

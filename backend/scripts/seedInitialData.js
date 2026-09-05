@@ -58,13 +58,13 @@ async function seed() {
     }
 
     const adminUserId = await upsertUser({
-      email: "admin@daiga.vn",
+      email: "admin@gdc.vn",
       fullName: "Quản trị viên Gà Đại Ca",
       roleId: roleMap.admin,
       passwordHash: adminHash,
     });
     const cashierUserId = await upsertUser({
-      email: "cashier@daiga.vn",
+      email: "cashier@gdc.vn",
       fullName: "Nhân viên Thu ngân",
       roleId: roleMap.employee,
       passwordHash: cashierHash,

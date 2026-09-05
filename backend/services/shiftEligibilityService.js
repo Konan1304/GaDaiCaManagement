@@ -39,7 +39,7 @@ async function eligibility(executor,args){
     SELECT TOP 1 id AS existingSessionId,status AS existingStatus FROM dbo.shift_sessions WHERE branch_id=@branchId AND business_date=@date AND operation_shift_code=@operationShift AND is_test=@isTest AND status NOT IN('cancelled','CANCELLED');`);
   const schedule=r.recordsets[0][0],attendance=r.recordsets[1][0],assignment=r.recordsets[2][0],session=r.recordsets[3][0];
   if(!schedule)reasons.push("Bạn không có lịch chính thức trong ca này");
-  if(!attendance)reasons.push("Chưa chấm công vào");
+  if(!attendance&&!isTest)reasons.push("Chưa chấm công vào");
   if(session)reasons.push("Ca này đã được mở");
   return {allowed:reasons.length===0,reasons,employee,schedule,attendance,assignment,session,businessDate:args.businessDate,operationShift:args.operationShift};
 }

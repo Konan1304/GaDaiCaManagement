@@ -53,6 +53,10 @@
 .operation-opening-cash small { color: #8b6700; font-weight: 800; }
 .operation-opening-cash b { font-size: 23px; }
 .operation-opening-cash span { color: #777; font-size: 10px; }
+.operation-open-form { display: grid; gap: 12px; margin-top: 14px; }
+.operation-open-form label { display: grid; gap: 6px; font-size: 12px; font-weight: 800; }
+.operation-open-form input { width: 100%; min-height: 50px; padding: 10px 14px; border: 1px solid #dfc987; border-radius: 11px; font-size: 20px; font-weight: 900; }
+.operation-open-form label small { color: #8b6700; }
 
 .operation-payment-total {
   display: grid;
@@ -69,6 +73,28 @@
 .operation-payment-total span { font-size: 13px; font-weight: 900; }
 .operation-payment-total b { grid-row: 1 / 3; grid-column: 2; color: #8a6200; font-size: 24px; }
 .operation-payment-total small { color: #777; }
+.operation-section-heading { margin-top: 18px; }
+.operation-section-heading h4 { margin: 0 0 4px; }
+.operation-section-heading small { color: #777; }
+.operation-revenue-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 16px 0; padding: 5px; border-radius: 14px; background: #f2f0eb; }
+.operation-revenue-tabs button { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 52px; padding: 10px 14px; border: 0; border-radius: 10px; background: transparent; color: #696158; cursor: pointer; }
+.operation-revenue-tabs button.active { background: #ffbc00; color: #18130a; box-shadow: 0 4px 12px #9b72002b; }
+.operation-revenue-tabs b { font-size: 15px; }
+.operation-revenue-tabs small { font-weight: 800; }
+.operation-tab-panel { padding: 16px; border: 1px solid #eadfcd; border-radius: 14px; background: #fff; }
+.operation-tab-panel .operation-cash-section { margin: 0; }
+.operation-grand-total { margin-bottom: 18px; }
+.operation-cash-totals { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.operation-cash-totals .operation-cash-income-total { background: #ffbc00; border: 2px solid #d89b00; box-shadow: 0 8px 18px #b9820030; }
+.operation-cash-totals .operation-cash-income-total small { color: #3d2c00; font-weight: 900; }
+.operation-cash-totals .operation-cash-income-total b { color: #18130a; font-size: 24px; }
+.operation-cash-totals .operation-cash-income-total em { display: block; margin-top: 5px; color: #594000; font-size: 10px; font-style: normal; font-weight: 700; }
+.operation-cash-totals .operation-expense-total { background: #fff3f2; border-color: #efb0aa; }
+.operation-cash-totals .operation-expense-total b { color: #b42318; }
+.operation-tab-panel .operation-cash-section { display: grid; gap: 16px; padding: 18px; }
+.operation-tab-panel .operation-cash-section h4 { margin: 0; font-size: 18px; }
+.operation-tab-panel .operation-cash-section .operation-report-note { gap: 8px; font-size: 13px; }
+.operation-tab-panel .operation-cash-section input { min-height: 52px; padding: 10px 14px; border-radius: 10px; font-size: 20px; font-weight: 800; }
 
 @media (max-width: 620px) {
   .operation-mode-actions { grid-template-columns: 1fr 1fr; gap: 8px; }
@@ -76,4 +102,5 @@
   .operation-mode-button > svg { width: 34px; height: 34px; padding: 8px; }
   .operation-mode-button b { font-size: 17px; }
   .operation-mode-button em { display: none; }
+  .operation-cash-totals { grid-template-columns: 1fr 1fr; }
 }

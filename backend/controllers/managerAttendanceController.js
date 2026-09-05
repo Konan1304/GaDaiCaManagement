@@ -140,7 +140,7 @@ async function options(req,res,next){try{
       FROM branches b ${condition} ORDER BY b.branch_name;
     SELECT DISTINCT e.id AS employeeId,e.employee_code AS employeeCode,u.full_name AS fullName,e.branch_id AS branchId
       FROM employees e JOIN users u ON u.id=e.user_id ${scope.branchId?"WHERE e.branch_id=@branchId":""} ORDER BY u.full_name;
-    SELECT id AS positionId,position_name AS positionName FROM positions ORDER BY position_name;`);
+    SELECT id AS positionId,position_name AS positionName FROM positions WHERE position_code IN('KITCHEN','CASHIER','COUNTER','MANAGER') ORDER BY CASE position_code WHEN 'KITCHEN' THEN 1 WHEN 'CASHIER' THEN 2 WHEN 'COUNTER' THEN 3 WHEN 'MANAGER' THEN 4 END;`);
   res.json({success:true,data:{branches:result.recordsets[0],employees:result.recordsets[1],positions:result.recordsets[2]}});
 }catch(error){next(error)}}
 

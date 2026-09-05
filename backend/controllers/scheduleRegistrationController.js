@@ -100,6 +100,32 @@ OUTPUT INSERTED.id,INSERTED.status,INSERTED.registration_open_at AS registration
 WHERE id=@id`);if(!result.recordset[0])return fail(res,404,"Không tìm thấy đợt đăng ký");res.json({success:true,message:target==="open"?"Đã mở đăng ký cho nhân viên":target==="locked"?"Đã khóa đăng ký":"Đã hủy đợt đăng ký",data:result.recordset[0]})}catch(error){next(error)}}
 
 async function validateCreatePeriod(req,res,next){try{const message=validatePeriodInput(req.body);if(message)return fail(res,400,message);const result=await (await getPool()).request().input("branchId",sql.Int,req.body.branchId).query("SELECT id FROM branches WHERE id=@branchId AND status='active'");if(!result.recordset[0])return fail(res,400,"Chi nhánh không hợp lệ");return next()}catch(error){next(error)}}
+async function validateCreateAllPeriods(req,res,next){try{
+ const pool=await getPool(),branches=await pool.request().query("SELECT id FROM branches WHERE status='active' ORDER BY id");
+ if(!branches.recordset.length)return fail(res,400,"Không có chi nhánh đang hoạt động");
+ req.body.branchId=branches.recordset[0].id;
+ const message=validatePeriodInput(req.body);if(message)return fail(res,400,message);
+ req.activeBranchIds=branches.recordset.map(item=>Number(item.id));return next();
+}catch(error){next(error)}}
+async function createAllPeriods(req,res,next){const pool=await getPool(),tx=new sql.Transaction(pool);let started=false;try{
+ const b=req.body,branchIds=req.activeBranchIds||[];
+ if(!branchIds.length||!checkWeek(b.weekStartDate,b.weekEndDate)||!b.title||!b.registrationOpenAt||!b.registrationCloseAt)return fail(res,400,"Thông tin đợt đăng ký không hợp lệ");
+ await tx.begin();started=true;
+ const conflicts=await new sql.Request(tx).input("start",sql.Date,b.weekStartDate).input("end",sql.Date,b.weekEndDate).query(`
+  SELECT br.branch_name AS branchName FROM schedule_registration_periods p JOIN branches br ON br.id=p.branch_id
+  WHERE br.status='active' AND p.status<>'cancelled' AND p.week_start_date<=@end AND p.week_end_date>=@start;
+ `);
+ if(conflicts.recordset.length){await tx.rollback();started=false;return fail(res,409,`Đã có đợt đăng ký trùng thời gian tại: ${conflicts.recordset.map(item=>item.branchName).join(", ")}`)}
+ const created=[];
+ for(const branchId of branchIds){
+  const result=await new sql.Request(tx).input("branchId",sql.Int,branchId).input("title",sql.NVarChar(200),b.title.trim()).input("start",sql.Date,b.weekStartDate).input("end",sql.Date,b.weekEndDate).input("openAt",sql.DateTime2,b.registrationOpenAt).input("closeAt",sql.DateTime2,b.registrationCloseAt).input("isTest",sql.Bit,scheduleTestMode).input("createdBy",sql.Int,req.user.userId).input("note",sql.NVarChar(1000),b.note||null).query(`
+   INSERT schedule_registration_periods(branch_id,title,week_start_date,week_end_date,registration_open_at,registration_close_at,status,is_test,created_by,note)
+   OUTPUT INSERTED.id AS periodId,INSERTED.branch_id AS branchId,INSERTED.status
+   VALUES(@branchId,@title,@start,@end,@openAt,@closeAt,'open',@isTest,@createdBy,@note);
+  `);created.push(result.recordset[0]);
+ }
+ await tx.commit();started=false;res.status(201).json({success:true,message:`Đã tạo và mở đăng ký cho ${created.length} chi nhánh.`,data:created});
+}catch(error){if(started)await tx.rollback().catch(()=>{});next(error)}}
 async function deletePeriod(req,res,next){const pool=await getPool(),tx=new sql.Transaction(pool);let started=false;try{await tx.begin();started=true;const p=await new sql.Request(tx).input("id",sql.Int,req.params.id).query("SELECT status FROM schedule_registration_periods WITH(UPDLOCK) WHERE id=@id");if(!p.recordset[0]){await tx.rollback();started=false;return fail(res,404,"Không tìm thấy đợt đăng ký")}if(!["draft","cancelled"].includes(p.recordset[0].status)){await tx.rollback();started=false;return fail(res,409,"Chỉ có thể xóa đợt nháp hoặc đã hủy")}await new sql.Request(tx).input("id",sql.Int,req.params.id).query("DELETE FROM schedule_draft_assignments WHERE period_id=@id; DELETE FROM employee_shift_registrations WHERE period_id=@id; DELETE FROM schedule_registration_periods WHERE id=@id;");await tx.commit();started=false;res.json({success:true,message:"Đã xóa đợt đăng ký"})}catch(error){if(started)await tx.rollback().catch(()=>{});next(error)}}
 async function deletePeriodAny(req,res,next){const pool=await getPool(),tx=new sql.Transaction(pool);let started=false;try{await tx.begin();started=true;const p=await new sql.Request(tx).input("id",sql.Int,req.params.id).query("SELECT id FROM schedule_registration_periods WITH(UPDLOCK) WHERE id=@id");if(!p.recordset[0]){await tx.rollback();started=false;return fail(res,404,"Không tìm thấy đợt đăng ký")}await new sql.Request(tx).input("id",sql.Int,req.params.id).query("DELETE FROM schedule_draft_assignments WHERE period_id=@id; DELETE FROM employee_shift_registrations WHERE period_id=@id; DELETE FROM schedule_registration_periods WHERE id=@id;");await tx.commit();started=false;res.json({success:true,message:"Đã xóa đợt đăng ký. Lịch chính thức đã công bố được giữ nguyên."})}catch(error){if(started)await tx.rollback().catch(()=>{});next(error)}}
 async function builderGetDraft(req,res,next){try{const pool=await getPool(),id=req.params.periodId;const result=await pool.request().input("id",sql.Int,id).query(`
@@ -263,7 +289,7 @@ async function managerSchedules(req,res,next){try{
  const pool=await getPool(),request=pool.request().input("from",sql.Date,from).input("to",sql.Date,to);
  const employeeWhere=["e.status='working'","u.status='active'"],scheduleWhere=["es.work_date BETWEEN @from AND @to"];
  const scopedBranch=req.managerBranchId||req.query.branchId;
- if(scopedBranch){employeeWhere.push("e.branch_id=@branchId");scheduleWhere.push("es.branch_id=@branchId");request.input("branchId",sql.Int,Number(scopedBranch))}
+ if(scopedBranch){employeeWhere.push("(e.branch_id=@branchId OR EXISTS(SELECT 1 FROM employee_schedules esx WHERE esx.employee_id=e.id AND esx.branch_id=@branchId AND esx.work_date BETWEEN @from AND @to))");scheduleWhere.push("es.branch_id=@branchId");request.input("branchId",sql.Int,Number(scopedBranch))}
  if(req.query.positionId){employeeWhere.push("e.position_id=@positionId");request.input("positionId",sql.Int,Number(req.query.positionId))}
  if(req.query.employeeId){employeeWhere.push("e.id=@employeeId");scheduleWhere.push("es.employee_id=@employeeId");request.input("employeeId",sql.Int,Number(req.query.employeeId))}
  if(String(req.query.search||"").trim()){employeeWhere.push("(u.full_name COLLATE Latin1_General_CI_AI LIKE @search OR e.employee_code COLLATE Latin1_General_CI_AI LIKE @search)");request.input("search",sql.NVarChar(180),`%${String(req.query.search).trim()}%`)}
@@ -279,8 +305,8 @@ async function managerSchedules(req,res,next){try{
     CONVERT(char(5),COALESCE(es.end_time_override,s.end_time),108) AS endTime,es.status,es.work_position AS workPosition,es.note
   FROM employee_schedules es JOIN shifts s ON s.id=es.shift_id
   WHERE ${scheduleWhere.join(" AND ")}
-    AND EXISTS(SELECT 1 FROM schedule_registration_periods rp WHERE rp.branch_id=es.branch_id
-      AND rp.status='published' AND es.work_date BETWEEN rp.week_start_date AND rp.week_end_date)
+    AND (es.status='completed' OR EXISTS(SELECT 1 FROM schedule_registration_periods rp WHERE rp.branch_id=es.branch_id
+      AND rp.status='published' AND es.work_date BETWEEN rp.week_start_date AND rp.week_end_date))
   ORDER BY es.employee_id,es.work_date,s.start_time;
  `);
  res.json({success:true,data:{period:{from,to},employees:result.recordsets[0],schedules:result.recordsets[1]}});
@@ -337,4 +363,4 @@ async function builderSaveWeekly(req,res,next){const pool=await getPool(),tx=new
  await tx.commit();started=false;res.json({success:true,message:"Đã lưu bản nháp xếp lịch",data:{count:list.length}});
 }catch(error){if(started)await tx.rollback().catch(()=>{});next(error)}}
 
-module.exports={current:currentWeekly,saveEmployee:saveEmployeeV2,saveEmployeeCurrent:saveEmployeeCurrentV2,periods,periodsScoped,managerScope,periodDetail:periodDetailWeekly,validateCreatePeriod,createPeriod,updatePeriod,deletePeriod:deletePeriodAny,transition,builderGet:builderGetV2,builderSave:builderSaveWeekly,publish:publishDraftV2,managerSchedules};
+module.exports={current:currentWeekly,saveEmployee:saveEmployeeV2,saveEmployeeCurrent:saveEmployeeCurrentV2,periods,periodsScoped,managerScope,periodDetail:periodDetailWeekly,validateCreatePeriod,validateCreateAllPeriods,createPeriod,createAllPeriods,updatePeriod,deletePeriod:deletePeriodAny,transition,builderGet:builderGetV2,builderSave:builderSaveWeekly,publish:publishDraftV2,managerSchedules};

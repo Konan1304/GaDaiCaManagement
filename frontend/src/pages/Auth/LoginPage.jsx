@@ -1,26 +1,32 @@
-import {useState} from "react";
+import {useEffect,useRef,useState} from "react";
 import {Navigate,useNavigate} from "react-router-dom";
 import {FiAlertCircle,FiEye,FiEyeOff,FiLock,FiMail} from "react-icons/fi";
-import hero from "../../assets/hero.png";
 import {createSession,getSession,homeForRole} from "../../utils/auth";
 import {authApi} from "../../api/services";
 
 export default function LoginPage(){
  const navigate=useNavigate(),session=getSession();
  const [show,setShow]=useState(false),[email,setEmail]=useState(""),[password,setPassword]=useState("");
- const [error,setError]=useState(""),[loading,setLoading]=useState(false);
+ const [error,setError]=useState(""),[loading,setLoading]=useState(false),[showWelcome,setShowWelcome]=useState(false);
+ const welcomeTimer=useRef(null);
+ useEffect(()=>()=>clearTimeout(welcomeTimer.current),[]);
+ if(showWelcome)return <div className="employee-login-welcome" role="status" aria-label="Đang vào trang chủ">
+  <div className="employee-login-welcome-logo"><img src="/admin-avatar.png" alt="Logo Gà Đại Ca"/></div>
+  <h1>Gà Đại Ca</h1>
+  <p>Chào mừng bạn trở lại</p>
+  <span className="employee-login-welcome-loader" aria-hidden="true"/>
+ </div>;
  if(session.isAuthenticated)return <Navigate to={homeForRole(session.role)} replace/>;
  async function handleSubmit(event){
   event.preventDefault();setLoading(true);setError("");
-  try{const response=await authApi.login({email:email.trim().toLowerCase(),password});createSession(response);navigate(homeForRole(response.role),{replace:true})}
+  try{const response=await authApi.login({email:email.trim().toLowerCase(),password});createSession(response);if(response.role==="employee"){setShowWelcome(true);welcomeTimer.current=setTimeout(()=>navigate("/employee/home",{replace:true}),1500)}else navigate(homeForRole(response.role),{replace:true})}
   catch(requestError){setError(requestError.response?.data?.message||"Không thể kết nối máy chủ")}
   finally{setLoading(false)}
  }
  return <div className="login-page">
-  {import.meta.env.VITE_APP_ENV==="sandbox"&&<div className="sandbox-login-note">Đăng nhập môi trường kiểm thử riêng · Không sử dụng tài khoản thật</div>}
-  <section className="login-visual"><div className="visual-brand"><span className="brand-mark">GĐC</span><b>GÀ ĐẠI CA</b></div><div className="visual-copy"><span>Quản lý thông minh · Vận hành dễ dàng</span><h1>Món ngon trọn vị,<br/>quản lý trọn tâm.</h1><p>Một nền tảng duy nhất để quản lý nhân sự, kho hàng và doanh thu hiệu quả.</p></div><img src={hero} alt="Món gà rán Gà Đại Ca"/></section>
-  <section className="login-panel"><form className="login-card" onSubmit={handleSubmit}><div className="login-logo"><span className="brand-mark">GĐC</span><div><b>GÀ ĐẠI CA</b><small>MANAGEMENT</small></div></div><div className="login-heading"><h2>Đăng nhập hệ thống</h2><p>Chào mừng bạn trở lại! Vui lòng nhập thông tin.</p></div>{error&&<div className="login-error"><FiAlertCircle/>{error}</div>}
-   <label>Email<div className="input-wrap"><FiMail/><input type="email" placeholder="name@daiga.vn" value={email} onChange={event=>{setEmail(event.target.value);setError("")}} autoComplete="email" required/></div></label>
+  <section className="login-visual"><div className="login-brand-name"><img src="/admin-avatar.png" alt="Logo Gà Đại Ca"/><div><b>GÀ ĐẠI CA</b><small>CHIKIN DAEJANG</small></div></div><div className="visual-copy"><span>Hệ thống quản lý cửa hàng</span><h1>Vận hành dễ dàng,<br/>quản lý hiệu quả.</h1><p>Quản lý nhân sự, lịch làm việc, kho hàng và doanh thu trên cùng một nền tảng.</p><div className="login-feature-list"><span>Nhân sự</span><span>Kho hàng</span><span>Doanh thu</span></div></div><img className="login-chicken-logo" src="/admin-avatar.png" alt="Gà Đại Ca - Chikin Daejang"/></section>
+  <section className="login-panel"><form className="login-card" onSubmit={handleSubmit}><div className="login-logo"><img src="/admin-avatar.png" alt="Logo Gà Đại Ca"/><div><b>GÀ ĐẠI CA</b><small>CHIKIN DAEJANG</small></div></div><div className="login-heading"><span>GÀ ĐẠI CA - CHIKIN DAEJANG</span><h2>Đăng nhập hệ thống</h2><p>Nhập tài khoản được cấp để tiếp tục làm việc.</p></div>{error&&<div className="login-error"><FiAlertCircle/>{error}</div>}
+   <label>Email<div className="input-wrap"><FiMail/><input type="email" placeholder="abc@gdc.vn" value={email} onChange={event=>{setEmail(event.target.value);setError("")}} autoComplete="email" required/></div></label>
    <label>Mật khẩu<div className="input-wrap"><FiLock/><input type={show?"text":"password"} placeholder="Nhập mật khẩu" value={password} onChange={event=>{setPassword(event.target.value);setError("")}} autoComplete="current-password" required/><button type="button" aria-label="Hiện hoặc ẩn mật khẩu" onClick={()=>setShow(!show)}>{show?<FiEyeOff/>:<FiEye/>}</button></div></label>
    <div className="form-options"><label className="check"><input type="checkbox"/> Ghi nhớ đăng nhập</label><a href="#forgot">Quên mật khẩu?</a></div><button className="btn btn-primary btn-login" type="submit" disabled={loading}>{loading?"Đang đăng nhập...":"Đăng nhập"}</button>
   </form></section>

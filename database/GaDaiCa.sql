@@ -98,8 +98,10 @@ CREATE TABLE employees (
     gender VARCHAR(10),
     address NVARCHAR(300),
     hire_date DATE NOT NULL,
+    employment_type VARCHAR(20),
     base_salary DECIMAL(18,2) NOT NULL DEFAULT 0,
     status VARCHAR(20) NOT NULL DEFAULT 'working',
+    profile_update_locked BIT NOT NULL DEFAULT 0,
     created_at DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
     updated_at DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
 
@@ -911,11 +913,10 @@ GO
 
 INSERT INTO positions (position_code, position_name)
 VALUES
-('MANAGER', N'Quản lý cửa hàng'),
+('MANAGER', N'Quản lý/Giám sát'),
 ('CASHIER', N'Nhân viên thu ngân'),
 ('KITCHEN', N'Nhân viên bếp'),
-('SERVICE', N'Nhân viên phục vụ'),
-('WAREHOUSE', N'Nhân viên kho');
+('COUNTER', N'Nhân viên quầy');
 GO
 
 INSERT INTO shifts (

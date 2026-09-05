@@ -42,14 +42,14 @@ async function load(db, id) {
     LEFT JOIN users ou ON ou.id=s.created_by_user_id
     WHERE s.id=@id AND s.is_test=@isTest;
 
-    SELECT i.*,p.product_code productCode,p.product_name productName,u.unit_name unitName,
+    SELECT i.*,p.product_code productCode,p.product_name productName,c.category_name categoryName,u.unit_name unitName,
       COALESCE(m.importedQuantity,0) liveImportedQuantity,
       COALESCE(m.exportedQuantity,0) liveExportedQuantity,
-      COALESCE(i.opening_actual_quantity,i.actual_received_quantity,0)
-        + COALESCE(m.importedQuantity,0) - COALESCE(m.exportedQuantity,0) systemQuantity
+      COALESCE(bi.quantity,0) systemQuantity
     FROM shift_inventory_items i
     JOIN shift_inventory_sessions sis ON sis.id=i.session_id
-    JOIN products p ON p.id=i.product_id JOIN units u ON u.id=i.unit_id
+    JOIN products p ON p.id=i.product_id JOIN categories c ON c.id=p.category_id JOIN units u ON u.id=i.unit_id
+    LEFT JOIN branch_inventories bi ON bi.branch_id=sis.branch_id AND bi.product_id=i.product_id
     OUTER APPLY (SELECT
       COALESCE(SUM(CASE WHEN t.transaction_type IN('import','transfer_in','adjustment_in') THEN t.quantity ELSE 0 END),0) importedQuantity,
       COALESCE(SUM(CASE WHEN t.transaction_type IN('sale','waste','transfer_out','adjustment_out') THEN t.quantity ELSE 0 END),0) exportedQuantity
@@ -57,7 +57,7 @@ async function load(db, id) {
       WHERE t.branch_id=sis.branch_id AND t.product_id=i.product_id
         AND t.created_at>=COALESCE(sis.received_at,sis.created_at)
         AND t.created_at<=COALESCE(sis.closed_at,SYSDATETIME())) m
-    WHERE i.session_id=@id ORDER BY p.product_name;
+    WHERE i.session_id=@id AND p.status='active' ORDER BY c.category_name,p.product_name;
 
     SELECT d.*,p.product_name productName
     FROM inventory_discrepancies d JOIN products p ON p.id=d.product_id
@@ -162,6 +162,10 @@ async function current(req, res, next) {
     const active = (await pool.request().input('branchId', sql.Int, context.branchId).input('date', sql.Date, date).input('userId', sql.Int, req.user.userId).input('isTest', sql.Bit, isTest).query(`
       SELECT TOP 1 id FROM shift_inventory_sessions WHERE branch_id=@branchId AND business_date=@date
         AND created_by_user_id=@userId AND is_test=@isTest AND status IN('RECEIVING','IN_PROGRESS','WAITING_HANDOVER') ORDER BY id DESC`)).recordset[0];
+    if(active)await pool.request().input('sessionId',sql.BigInt,active.id).input('branchId',sql.Int,context.branchId).query(`INSERT shift_inventory_items(session_id,product_id,unit_id,declared_handover_quantity,opening_actual_quantity,actual_received_quantity)
+      SELECT @sessionId,p.id,p.unit_id,COALESCE(bi.quantity,0),COALESCE(bi.quantity,0),COALESCE(bi.quantity,0)
+      FROM products p LEFT JOIN branch_inventories bi ON bi.branch_id=@branchId AND bi.product_id=p.id
+      WHERE p.status='active' AND NOT EXISTS(SELECT 1 FROM shift_inventory_items i WHERE i.session_id=@sessionId AND i.product_id=p.id)`);
     res.json({ success: true, data: { employee: context, operation: context.schedule ? { ...context.schedule, shiftStatus: 'PRE_OPEN' } : null, inventory: active ? await load(pool, active.id) : null } });
   } catch (error) { next(error); }
 }
@@ -181,16 +185,17 @@ async function start(req, res, next) {
     if (active) throw Object.assign(new Error(active.created_by_user_id === req.user.userId ? 'Bạn đã bắt đầu nhận kho' : 'Một nhân viên khác đang nhận kho ca này'), { http: 409 });
     const previous = (await db.request().input('branchId', sql.Int, context.branchId).input('isTest', sql.Bit, isTest).query(`SELECT TOP 1 id FROM shift_inventory_sessions WITH(UPDLOCK)
       WHERE branch_id=@branchId AND status='WAITING_HANDOVER' AND is_test=@isTest ORDER BY closed_at DESC,id DESC`)).recordset[0];
-    if (!previous) throw Object.assign(new Error('Chưa có tồn đầu kỳ hoặc bàn giao ca trước'), { http: 409 });
-    const created = await db.request().input('branchId', sql.Int, context.branchId).input('previousId', sql.BigInt, previous.id).input('date', sql.Date, date).input('operation', sql.VarChar(10), context.schedule.operationShift).input('userId', sql.Int, req.user.userId).input('isTest', sql.Bit, isTest).query(`
-      INSERT shift_inventory_sessions(branch_id,previous_inventory_session_id,business_date,operation_shift_code,status,created_by_user_id,is_test)
-      OUTPUT INSERTED.id VALUES(@branchId,@previousId,@date,@operation,'RECEIVING',@userId,@isTest)`);
+    const created = await db.request().input('branchId', sql.Int, context.branchId).input('previousId', sql.BigInt, previous?.id||null).input('date', sql.Date, date).input('operation', sql.VarChar(10), context.schedule.operationShift).input('userId', sql.Int, req.user.userId).input('isTest', sql.Bit, isTest).query(`
+      INSERT shift_inventory_sessions(branch_id,previous_inventory_session_id,business_date,operation_shift_code,status,created_by_user_id,is_test,received_at)
+      OUTPUT INSERTED.id VALUES(@branchId,@previousId,@date,@operation,'IN_PROGRESS',@userId,@isTest,SYSDATETIME())`);
     const sessionId = created.recordset[0].id;
-    await db.request().input('sessionId', sql.BigInt, sessionId).input('previousId', sql.BigInt, previous.id).query(`INSERT shift_inventory_items(session_id,product_id,unit_id,declared_handover_quantity)
-      SELECT @sessionId,product_id,unit_id,closing_actual_quantity FROM shift_inventory_items WHERE session_id=@previousId`);
-    await audit(db, { sessionId, branchId: context.branchId, userId: req.user.userId, action: 'INVENTORY_RECEIVE_STARTED', payload: { scheduleId } });
+    await db.request().input('sessionId', sql.BigInt, sessionId).input('branchId', sql.Int, context.branchId).query(`INSERT shift_inventory_items(session_id,product_id,unit_id,declared_handover_quantity)
+      SELECT @sessionId,p.id,p.unit_id,COALESCE(bi.quantity,0)
+      FROM products p LEFT JOIN branch_inventories bi ON bi.branch_id=@branchId AND bi.product_id=p.id
+      WHERE p.status='active'`);
+    await audit(db, { sessionId, branchId: context.branchId, userId: req.user.userId, action: 'SHIFT_USAGE_STARTED', payload: { scheduleId } });
     await tx.commit(); begun = false;
-    res.status(201).json({ success: true, message: 'Đã bắt đầu kiểm nhận kho', data: await load(pool, sessionId) });
+    res.status(201).json({ success: true, message: 'Đã mở sổ xuất nguyên liệu trong ca', data: await load(pool, sessionId) });
   } catch (error) { if (begun) await tx.rollback().catch(() => {}); error.http ? fail(res, error.http, error.message) : next(error); }
 }
 
@@ -205,12 +210,12 @@ async function receive(req, res, next) {
     await db.request().input('sessionId', sql.BigInt, sessionId).input('employeeId', sql.Int, employee.employeeId).query("UPDATE shift_inventory_sessions SET received_by_employee_id=@employeeId,received_at=SYSDATETIME(),updated_at=SYSDATETIME() WHERE id=@sessionId");
     for (const item of items) {
       const row = (await db.request().input('sessionId', sql.BigInt, sessionId).input('productId', sql.Int, Number(item.productId)).query('SELECT * FROM shift_inventory_items WITH(UPDLOCK) WHERE session_id=@sessionId AND product_id=@productId')).recordset[0];
-      const actual = numberValue(item.actualQuantity); const imported = numberValue(item.importedQuantity ?? 0); const exported = numberValue(item.exportedQuantity ?? 0); const note = String(item.note || '').trim();
-      if (!row || actual === null || actual < 0 || imported === null || imported < 0 || exported === null || exported < 0) throw Object.assign(new Error('Số đếm, nhập hoặc xuất không hợp lệ'), { http: 400 });
-      const expected = Number(row.declared_handover_quantity) + imported - exported;
+      const actual = numberValue(item.actualQuantity); const imported = 0; const exported = 0; const note = String(item.note || '').trim();
+      if (!row || actual === null || actual < 0) throw Object.assign(new Error('Số tồn thực tế không hợp lệ'), { http: 400 });
+      const expected = Number(row.declared_handover_quantity);
       const difference = actual - expected;
       if (difference && !note) throw Object.assign(new Error('Có chênh lệch phải nhập ghi chú'), { http: 400 });
-      if (imported > 0) {
+      if (false && imported > 0) {
         const reason = `Nhập tay khi nhận kho đầu ca${note ? `: ${note}` : ''}`;
         await db.request().input('branchId', sql.Int, session.branch_id).input('productId', sql.Int, row.product_id).input('quantity', sql.Decimal(18, 3), imported).input('referenceId', sql.Int, sessionId).input('reason', sql.NVarChar(500), reason).input('userId', sql.Int, req.user.userId).query(`
           MERGE branch_inventories AS target USING(SELECT @branchId branch_id,@productId product_id) AS source
@@ -220,7 +225,7 @@ async function receive(req, res, next) {
           INSERT inventory_transactions(branch_id,product_id,transaction_type,quantity,reference_type,reference_id,reason,created_by,created_at)
           VALUES(@branchId,@productId,'transfer_in',@quantity,'shift_inventory_receive',@referenceId,@reason,@userId,SYSDATETIME())`);
       }
-      if (exported > 0) {
+      if (false && exported > 0) {
         const stock = (await db.request().input('branchId', sql.Int, session.branch_id).input('productId', sql.Int, row.product_id).query('SELECT quantity FROM branch_inventories WITH(UPDLOCK,HOLDLOCK) WHERE branch_id=@branchId AND product_id=@productId')).recordset[0];
         if (!stock || Number(stock.quantity) < exported) throw Object.assign(new Error(`${row.product_id}: số lượng xuất vượt quá tồn kho`), { http: 409 });
         const reason = `Xuất tay khi nhận kho đầu ca${note ? `: ${note}` : ''}`;
@@ -278,7 +283,7 @@ async function recordUsage(req, res, next) {
     if (!employee) throw Object.assign(new Error('Không tìm thấy hồ sơ nhân viên'), { http: 403 });
     const session = (await db.request().input('sessionId', sql.BigInt, sessionId).input('userId', sql.Int, req.user.userId).input('isTest', sql.Bit, isTest).query(`
       SELECT * FROM shift_inventory_sessions WITH(UPDLOCK,HOLDLOCK)
-      WHERE id=@sessionId AND created_by_user_id=@userId AND status='IN_PROGRESS' AND is_test=@isTest`)).recordset[0];
+      WHERE id=@sessionId AND created_by_user_id=@userId AND status IN('RECEIVING','IN_PROGRESS') AND is_test=@isTest`)).recordset[0];
     if (!session) throw Object.assign(new Error('Chỉ người đang phụ trách phiên tồn trong ca mới được ghi xuất sử dụng'), { http: 403 });
 
     const duplicate = (await db.request().input('sessionId', sql.BigInt, sessionId).input('requestKey', sql.NVarChar(100), requestKey).query(`
@@ -310,6 +315,7 @@ async function recordUsage(req, res, next) {
       savedItems.push({ productId, quantity });
     }
     await audit(db, { sessionId, branchId: session.branch_id, userId: req.user.userId, action: 'SHIFT_USAGE_EXPORTED', payload: { requestKey, note, items: savedItems } });
+    await db.request().input('sessionId',sql.BigInt,sessionId).query("UPDATE shift_inventory_sessions SET status='IN_PROGRESS',received_at=COALESCE(received_at,SYSDATETIME()),updated_at=SYSDATETIME() WHERE id=@sessionId");
     await tx.commit(); begun = false;
     res.status(201).json({ success: true, message: 'Đã ghi xuất sử dụng trong ca', data: await load(pool, sessionId) });
   } catch (error) { if (begun) await tx.rollback().catch(() => {}); error.http ? fail(res, error.http, error.message) : next(error); }
@@ -332,7 +338,8 @@ async function close(req, res, next) {
         COALESCE(SUM(CASE WHEN transaction_type IN('sale','waste','transfer_out','adjustment_out') THEN quantity ELSE 0 END),0) outgoing
         FROM inventory_transactions WHERE branch_id=@branchId AND product_id=@productId AND created_at>=@from`)).recordset[0];
       const incoming = Number(movement.incoming); const outgoing = Number(movement.outgoing);
-      const expected = Number(row.opening_actual_quantity) + incoming - outgoing; const difference = closing - expected;
+      const stock = (await db.request().input('branchId', sql.Int, session.branch_id).input('productId', sql.Int, row.product_id).query('SELECT quantity FROM branch_inventories WITH(UPDLOCK,HOLDLOCK) WHERE branch_id=@branchId AND product_id=@productId')).recordset[0];
+      const expected = Number(stock?.quantity || 0); const difference = closing - expected;
       if (difference !== 0 && !note) throw Object.assign(new Error('Có chênh lệch tồn cuối phải nhập ghi chú'), { http: 400 });
       await db.request().input('id', sql.BigInt, row.id).input('incoming', sql.Decimal(18, 3), incoming).input('outgoing', sql.Decimal(18, 3), outgoing).input('closing', sql.Decimal(18, 3), closing).input('used', sql.Decimal(18, 3), expected - closing).input('note', sql.NVarChar(500), note || null).query(`UPDATE shift_inventory_items SET imported_quantity_in_shift=@incoming,special_export_quantity_in_shift=@outgoing,
         closing_actual_quantity=@closing,estimated_used_quantity=@used,closing_note=@note,updated_at=SYSDATETIME() WHERE id=@id`);

@@ -9,11 +9,11 @@ const iso=value=>value instanceof Date
 const range=(start,end)=>{const a=new Date(`${iso(start)}T00:00:00`),b=new Date(`${iso(end)}T00:00:00`);return Array.from({length:Math.floor((b-a)/864e5)+1},(_,i)=>{const d=new Date(a);d.setDate(a.getDate()+i);return d})};
 export default function ShiftRegistrationPage(){
  const [period,setPeriod]=useState(undefined),[selected,setSelected]=useState({}),[note,setNote]=useState(""),[message,setMessage]=useState(""),[error,setError]=useState(""),[saving,setSaving]=useState(false);
- const load=()=>employeeApi.currentShiftRegistration().then(r=>{setPeriod(r.data);if(r.data){const own={};r.data.existingRegistrations.forEach(x=>own[iso(x.workDate)]=x.shiftCode);setSelected(own);setNote(r.data.existingRegistrations[0]?.note||"")}}).catch(e=>setError(apiError(e)));
+ const load=()=>employeeApi.currentShiftRegistration().then(r=>{setPeriod(r.data);if(r.data){const own={};r.data.existingRegistrations.forEach(x=>{if(x.shiftCode!=="OFF")own[iso(x.workDate)]=x.shiftCode});setSelected(own);setNote(r.data.existingRegistrations[0]?.note||"")}}).catch(e=>setError(apiError(e)));
  useEffect(()=>{load();const refresh=()=>document.visibilityState==="visible"&&load();document.addEventListener("visibilitychange",refresh);return()=>document.removeEventListener("visibilitychange",refresh)},[]);
  const dates=useMemo(()=>period?range(period.startDate,period.endDate):[],[period]);
  const employees=useMemo(()=>{if(!period)return[];const map=new Map();period.tableRows.forEach(row=>{if(!map.has(row.employeeId))map.set(row.employeeId,{...row,registrations:{}});if(row.workDate)map.get(row.employeeId).registrations[iso(row.workDate)]=row.shiftCode});return [...map.values()]},[period]);
- async function save(){setSaving(true);setError("");setMessage("");try{const registrations=dates.filter(d=>selected[iso(d)]).map(d=>({workDate:iso(d),shiftCode:selected[iso(d)]}));const r=await employeeApi.saveShiftRegistration(period.periodId,{registrations,note});setMessage(r.message);await load()}catch(e){setError(apiError(e))}finally{setSaving(false)}}
+ async function save(){setSaving(true);setError("");setMessage("");try{const registrations=dates.map(d=>({workDate:iso(d),shiftCode:selected[iso(d)]||"OFF"}));const r=await employeeApi.saveShiftRegistration(period.periodId,{registrations,note});setMessage(r.message);await load()}catch(e){setError(apiError(e))}finally{setSaving(false)}}
  if(period===undefined)return <div className="emp-card emp-empty">Đang tải đợt đăng ký...</div>;
  if(!period)return <div className="emp-card emp-empty"><FiCalendar/><div>Hiện chưa có đợt đăng ký lịch làm</div></div>;
  const remaining=Math.max(0,new Date(period.registrationCloseAt)-new Date(period.serverTime)),hours=Math.ceil(remaining/36e5);

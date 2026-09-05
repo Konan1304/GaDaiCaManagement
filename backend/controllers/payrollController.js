@@ -39,7 +39,7 @@ async function list(req,res,next){try{
   if(!validMonth(month))return fail(res,400,"Tháng phải có định dạng YYYY-MM");
   const pool=await getPool(),scope=await managerBranch(pool,req.user);
   if(req.user.role!=="admin"&&!scope)return fail(res,403,"Tài khoản quản lý chưa được gán chi nhánh");
-  const request=baseRequest(pool,month),where=["e.status='working'"];
+  const request=baseRequest(pool,month),where=["(e.status='working' OR COALESCE(w.total_work_days,0)>0)"];
   const requestedBranch=Number(req.query.branchId||0);
   if(scope){where.push("e.branch_id=@branchId");request.input("branchId",sql.Int,scope)}
   else if(requestedBranch){where.push("e.branch_id=@branchId");request.input("branchId",sql.Int,requestedBranch)}
@@ -178,7 +178,7 @@ async function calculate(req,res,next){try{
 }catch(error){next(error)}}
 
 async function listCapture(req){
-  const pool=await getPool(),scope=await managerBranch(pool,req.user),request=baseRequest(pool,req.query.month),where=["e.status='working'"];
+  const pool=await getPool(),scope=await managerBranch(pool,req.user),request=baseRequest(pool,req.query.month),where=["(e.status='working' OR COALESCE(w.total_work_days,0)>0)"];
   if(scope){where.push("e.branch_id=@branchId");request.input("branchId",sql.Int,scope)}
   else if(Number(req.query.branchId||0)){where.push("e.branch_id=@branchId");request.input("branchId",sql.Int,Number(req.query.branchId))}
   const result=await request.input("defaultRate",sql.Decimal(18,2),DEFAULT_RATE).query(`${attendanceCte}

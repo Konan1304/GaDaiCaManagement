@@ -62,7 +62,7 @@ async function list(req,res,next){try{
  const request=(await getPool()).request().input("offset",sql.Int,(page-1)*limit).input("limit",sql.Int,limit),where=[];
  const search=clean(req.query.search),status=clean(req.query.status);
  if(search){where.push("(pr.receipt_code LIKE @search OR s.supplier_name LIKE @search OR s.display_name LIKE @search OR pr.source_document_number LIKE @search)");request.input("search",sql.NVarChar(300),`%${search}%`)}
- if(["draft","completed","adjusted"].includes(status)){where.push("pr.status=@status");request.input("status",sql.VarChar(20),status)}
+ if(["draft","submitted","returned","rejected","completed","adjusted"].includes(status)){where.push("pr.status=@status");request.input("status",sql.VarChar(20),status)}
  for(const [query,column,param] of [["supplier_id","pr.supplier_id","supplier"],["branch_id","pr.branch_id","branch"]]){const value=integer(req.query[query]);if(value){where.push(`${column}=@${param}`);request.input(param,sql.Int,value)}}
  if(req.query.date_from){where.push("CAST(pr.receipt_date AS date)>=@from");request.input("from",sql.Date,req.query.date_from)}
  if(req.query.date_to){where.push("CAST(pr.receipt_date AS date)<=@to");request.input("to",sql.Date,req.query.date_to)}
@@ -86,13 +86,14 @@ async function detail(req,res,next){try{
   pr.received_by receivedBy,pr.source_document_number sourceDocumentNumber,pr.created_at createdAt,pr.updated_at updatedAt,pr.confirmed_at confirmedAt
   FROM purchase_receipts pr JOIN suppliers s ON s.id=pr.supplier_id JOIN branches b ON b.id=pr.branch_id JOIN users u ON u.id=pr.created_by WHERE pr.id=@id;
   SELECT pri.id itemId,pri.product_id productId,p.product_code productCode,p.product_name productName,u.unit_name unitName,
-  pri.quantity,pri.unit_price unitPrice,pri.line_total lineTotal,pri.batch_number batchNumber,pri.manufacturing_date manufacturingDate,
+  pri.quantity,pri.ordered_quantity orderedQuantity,pri.unit_price unitPrice,pri.line_total lineTotal,pri.batch_number batchNumber,pri.manufacturing_date manufacturingDate,
   pri.expiry_date expiryDate,pri.notes FROM purchase_receipt_items pri JOIN products p ON p.id=pri.product_id
   JOIN units u ON u.id=p.unit_id WHERE pri.purchase_receipt_id=@id ORDER BY pri.id;
   SELECT id,transaction_type transactionType,product_id productId,quantity,unit_cost unitCost,reason,created_at createdAt
-  FROM inventory_transactions WHERE reference_type='purchase_receipt' AND reference_id=@id ORDER BY id;`);
+  FROM inventory_transactions WHERE reference_type='purchase_receipt' AND reference_id=@id ORDER BY id;
+  SELECT id documentId,file_name fileName,mime_type mimeType,file_size fileSize,created_at createdAt FROM purchase_receipt_documents WHERE purchase_receipt_id=@id ORDER BY id;`);
  if(!result.recordsets[0][0])return fail(res,404,"Không tìm thấy phiếu nhập.");
- res.json({success:true,data:{...result.recordsets[0][0],items:result.recordsets[1],transactions:result.recordsets[2]}});
+ res.json({success:true,data:{...result.recordsets[0][0],items:result.recordsets[1],transactions:result.recordsets[2],documents:result.recordsets[3]}});
 }catch(error){next(error)}}
 
 async function create(req,res,next){let transaction;try{
@@ -133,7 +134,11 @@ async function confirm(req,res,next){let transaction;try{
  const pool=await getPool();transaction=new sql.Transaction(pool);await transaction.begin();
  const header=await new sql.Request(transaction).input("id",sql.Int,id).query("SELECT * FROM purchase_receipts WITH (UPDLOCK,HOLDLOCK) WHERE id=@id");
  const receipt=header.recordset[0];if(!receipt)throw Object.assign(new Error("Không tìm thấy phiếu nhập."),{status:404});
- if(receipt.status!=="draft")throw Object.assign(new Error("Phiếu nhập đã được xác nhận hoặc không còn ở trạng thái Nháp."),{status:409});
+ if(!["draft","submitted"].includes(receipt.status))throw Object.assign(new Error("Phiếu nhập đã được xử lý hoặc không còn chờ duyệt."),{status:409});
+ if(receipt.status==="submitted"){
+  const documentCount=(await new sql.Request(transaction).input("id",sql.Int,id).query("SELECT COUNT(*) total FROM purchase_receipt_documents WHERE purchase_receipt_id=@id")).recordset[0].total;
+  if(!documentCount)throw Object.assign(new Error("Phiếu do nhân viên gửi phải có ảnh chứng từ trước khi duyệt."),{status:409});
+ }
  const rows=(await new sql.Request(transaction).input("id",sql.Int,id).query("SELECT * FROM purchase_receipt_items WHERE purchase_receipt_id=@id")).recordset;
  if(!rows.length)throw Object.assign(new Error("Phiếu nhập phải có ít nhất một sản phẩm."),{status:400});
  for(const item of rows){
@@ -151,7 +156,7 @@ async function confirm(req,res,next){let transaction;try{
    .query(`INSERT inventory_transactions(branch_id,product_id,transaction_type,quantity,unit_cost,reference_type,reference_id,created_by,batch_number,manufacturing_date,expiry_date)
     VALUES(@branch,@product,'import',@qty,@cost,'purchase_receipt',@id,@user,@batch,@mfg,@expiry)`);
  }
- await new sql.Request(transaction).input("id",sql.Int,id).query("UPDATE purchase_receipts SET status='completed',confirmed_at=SYSDATETIME(),updated_at=SYSDATETIME() WHERE id=@id");
+ await new sql.Request(transaction).input("id",sql.Int,id).input("user",sql.Int,req.user.userId).query("UPDATE purchase_receipts SET status='completed',confirmed_at=SYSDATETIME(),reviewed_at=SYSDATETIME(),reviewed_by=@user,updated_at=SYSDATETIME() WHERE id=@id");
  await transaction.commit();res.json({success:true,message:"Xác nhận nhập kho thành công. Tồn kho đã được cập nhật."});
 }catch(error){if(transaction)try{await transaction.rollback()}catch{};if(error.status)return fail(res,error.status,error.message);next(error)}}
 
@@ -176,4 +181,47 @@ async function adjust(req,res,next){let transaction;try{
  await transaction.commit();res.json({success:true,message:"Điều chỉnh tồn kho thành công."});
 }catch(error){if(transaction)try{await transaction.rollback()}catch{};if(error.status)return fail(res,error.status,error.message);next(error)}}
 
-module.exports={list,detail,create,update,remove,confirm,adjust};
+async function employeeOptions(req,res,next){try{
+ const pool=await getPool();const result=await pool.request().input("user",sql.Int,req.user.userId).query(`SELECT e.branch_id branchId,b.branch_name branchName FROM employees e JOIN users u ON u.id=e.user_id JOIN branches b ON b.id=e.branch_id WHERE e.user_id=@user AND e.status='working' AND u.status='active';
+ SELECT id supplierId,COALESCE(display_name,supplier_name) supplierName FROM suppliers WHERE status='active' ORDER BY supplier_name;
+ SELECT p.id productId,p.product_code productCode,p.product_name productName,p.description specification,u.unit_name unitName FROM products p JOIN units u ON u.id=p.unit_id WHERE p.status='active' AND p.product_code<>'NVL_KHAC' ORDER BY p.product_name;`);
+ if(!result.recordsets[0][0])return fail(res,403,"Không tìm thấy chi nhánh làm việc của nhân viên.");res.json({success:true,data:{branch:result.recordsets[0][0],suppliers:result.recordsets[1],products:result.recordsets[2]}});
+}catch(error){next(error)}}
+
+async function employeeCreate(req,res,next){let transaction;try{
+ let supplierId=integer(req.body.supplierId);const otherSupplier=req.body.otherSupplier===true,rawItems=Array.isArray(req.body.items)?req.body.items:[],note=clean(req.body.note);
+ if(otherSupplier&&!note)return fail(res,400,"Khi chọn nhà cung cấp Khác, ghi chú là bắt buộc.");
+ if((!supplierId&&!otherSupplier)||!rawItems.length)return fail(res,400,"Nhà cung cấp và hàng thực nhận là bắt buộc.");
+ const items=rawItems.map(item=>({productId:integer(item.productId),otherProduct:item.otherProduct===true,ordered:Number(item.orderedQuantity),note:clean(item.note)||null}));
+ if(items.some(item=>(!item.productId&&!item.otherProduct)||!Number.isFinite(item.ordered)||item.ordered<=0))return fail(res,400,"Nguyên liệu và số lượng đặt phải hợp lệ.");
+ if(items.some(item=>item.otherProduct&&!item.note))return fail(res,400,"Khi chọn nguyên liệu Khác, tên và quy cách trong ghi chú là bắt buộc.");
+ if(items.filter(item=>item.otherProduct).length>1)return fail(res,400,"Mỗi phiếu chỉ được có một dòng nguyên liệu Khác.");
+ const pool=await getPool();transaction=new sql.Transaction(pool);await transaction.begin();const employee=(await new sql.Request(transaction).input("user",sql.Int,req.user.userId).query("SELECT e.branch_id branchId FROM employees e JOIN users u ON u.id=e.user_id WHERE e.user_id=@user AND e.status='working' AND u.status='active'")).recordset[0];if(!employee)throw Object.assign(new Error("Không tìm thấy chi nhánh làm việc."),{status:403});
+ if(otherSupplier){const other=(await new sql.Request(transaction).query("SELECT TOP 1 id FROM suppliers WHERE supplier_code='NCC_KHAC'; IF @@ROWCOUNT=0 INSERT suppliers(supplier_code,supplier_name,status) OUTPUT INSERTED.id VALUES('NCC_KHAC',N'Nhà cung cấp khác','active');")).recordsets.flat().find(row=>row.id);supplierId=other?.id;if(!supplierId)throw Object.assign(new Error("Không thể xác định nhà cung cấp khác."),{status:500});}
+ if(items.some(item=>item.otherProduct)){const result=await new sql.Request(transaction).query(`DECLARE @id INT=(SELECT TOP 1 id FROM products WHERE product_code='NVL_KHAC');
+  IF @id IS NULL BEGIN DECLARE @category INT=(SELECT TOP 1 id FROM categories ORDER BY id),@unit INT=(SELECT TOP 1 id FROM units ORDER BY id);
+   IF @category IS NULL OR @unit IS NULL THROW 51020,N'Chưa có nhóm hoặc đơn vị tính để tạo nguyên liệu khác.',1;
+   INSERT products(category_id,unit_id,product_code,product_name,product_type,sale_price,cost_price,minimum_stock,description,status) OUTPUT INSERTED.id VALUES(@category,@unit,'NVL_KHAC',N'Nguyên liệu khác','ingredient',0,0,0,N'Chi tiết xem trong ghi chú phiếu nhập','active'); END
+  ELSE SELECT @id id;`);const otherProductId=result.recordsets.flat().find(row=>row.id)?.id;if(!otherProductId)throw Object.assign(new Error("Không thể xác định nguyên liệu khác."),{status:500});items.forEach(item=>{if(item.otherProduct)item.productId=otherProductId});}
+ await validateLinks(new sql.Request(transaction),supplierId,employee.branchId,items);
+ const inserted=await new sql.Request(transaction).input("code",sql.VarChar(50),`TMP-${Date.now()}`).input("branch",sql.Int,employee.branchId).input("supplier",sql.Int,supplierId).input("user",sql.Int,req.user.userId).input("date",sql.DateTime2,req.body.receiptDate?new Date(req.body.receiptDate):new Date()).input("delivery",sql.NVarChar(150),clean(req.body.deliveryPerson)||null).input("document",sql.NVarChar(100),clean(req.body.sourceDocumentNumber)||null).input("note",sql.NVarChar(500),note||null).query(`INSERT purchase_receipts(receipt_code,branch_id,supplier_id,created_by,receipt_date,status,note,delivery_person,source_document_number,submitted_at) OUTPUT INSERTED.id VALUES(@code,@branch,@supplier,@user,@date,'submitted',@note,@delivery,@document,SYSDATETIME())`);
+ const id=inserted.recordset[0].id,code=`PN-${new Date().toISOString().slice(0,10).replaceAll("-","")}-${String(id).padStart(5,"0")}`;await new sql.Request(transaction).input("id",sql.Int,id).input("code",sql.VarChar(50),code).query("UPDATE purchase_receipts SET receipt_code=@code WHERE id=@id");
+ for(const item of items)await new sql.Request(transaction).input("id",sql.Int,id).input("product",sql.Int,item.productId).input("ordered",sql.Decimal(18,3),item.ordered).input("note",sql.NVarChar(500),item.note).query("INSERT purchase_receipt_items(purchase_receipt_id,product_id,ordered_quantity,quantity,notes) VALUES(@id,@product,@ordered,@ordered,@note)");
+ await transaction.commit();res.status(201).json({success:true,message:"Đã gửi phiếu nhập hàng chờ Admin duyệt.",data:{receiptId:id,receiptCode:code}});
+}catch(error){if(transaction)try{await transaction.rollback()}catch{};if(error.status)return fail(res,error.status,error.message);next(error)}}
+
+async function employeeDocument(req,res,next){try{
+ const fs=require("fs"),id=integer(req.params.id);if(!id||!req.file)return fail(res,400,"Thiếu ảnh chứng từ.");const pool=await getPool();const owned=(await pool.request().input("id",sql.Int,id).input("user",sql.Int,req.user.userId).query("SELECT id FROM purchase_receipts WHERE id=@id AND created_by=@user AND status IN('submitted','returned')")).recordset[0];if(!owned){fs.unlink(req.file.path,()=>{});return fail(res,403,"Không có quyền thêm ảnh cho phiếu này.")};await pool.request().input("id",sql.Int,id).input("name",sql.NVarChar(255),req.file.originalname).input("path",sql.NVarChar(1000),req.file.path).input("mime",sql.VarChar(100),req.file.mimetype).input("size",sql.BigInt,req.file.size).input("user",sql.Int,req.user.userId).query("INSERT purchase_receipt_documents(purchase_receipt_id,file_name,file_path,mime_type,file_size,uploaded_by) VALUES(@id,@name,@path,@mime,@size,@user)");res.status(201).json({success:true,message:"Đã lưu ảnh chứng từ."});
+}catch(error){next(error)}}
+
+async function documentFile(req,res,next){try{
+ const path=require("path"),fs=require("fs"),receiptId=integer(req.params.id),documentId=integer(req.params.documentId);
+ if(!receiptId||!documentId)return fail(res,400,"Ảnh chứng từ không hợp lệ.");
+ const row=(await (await getPool()).request().input("receipt",sql.Int,receiptId).input("document",sql.Int,documentId).query("SELECT file_name fileName,file_path filePath,mime_type mimeType FROM purchase_receipt_documents WHERE id=@document AND purchase_receipt_id=@receipt")).recordset[0];
+ if(!row||!row.filePath||!fs.existsSync(row.filePath))return fail(res,404,"Không tìm thấy ảnh chứng từ.");
+ res.type(row.mimeType||"application/octet-stream");
+ res.setHeader("Content-Disposition",`inline; filename*=UTF-8''${encodeURIComponent(path.basename(row.fileName||"chung-tu"))}`);
+ res.sendFile(path.resolve(row.filePath));
+}catch(error){next(error)}}
+
+module.exports={list,detail,create,update,remove,confirm,adjust,employeeOptions,employeeCreate,employeeDocument,documentFile};

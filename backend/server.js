@@ -1,6 +1,7 @@
 const { loadEnvironment } = require("./config/env");
 loadEnvironment();
 const express = require("express");
+const path = require("path");
 const cors = require("cors");
 const { connectDatabase, getPool } = require("./config/db");
 const { loadModels } = require("./models");
@@ -9,11 +10,25 @@ const { createCrudRouter } = require("./routes/crudRoutes");
 const app = express();
 app.disable("x-powered-by");
 const allowedOrigins = process.env.CORS_ORIGIN.split(",").map((value) => value.trim()).filter(Boolean);
+const isLanFrontendOrigin = (origin) => {
+  try {
+    const url = new URL(origin);
+    if (url.protocol !== "http:" || url.port !== "5173") return false;
+    return url.hostname === "localhost"
+      || url.hostname === "127.0.0.1"
+      || /^10(?:\.\d{1,3}){3}$/.test(url.hostname)
+      || /^192\.168(?:\.\d{1,3}){2}$/.test(url.hostname)
+      || /^172\.(?:1[6-9]|2\d|3[01])(?:\.\d{1,3}){2}$/.test(url.hostname);
+  } catch {
+    return false;
+  }
+};
 app.use(cors({ origin(origin, callback) {
-  if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+  if (!origin || allowedOrigins.includes(origin) || isLanFrontendOrigin(origin)) return callback(null, true);
   return callback(new Error(`CORS từ chối origin: ${origin}`));
 }, credentials:true }));
 app.use(express.json({ limit:"1mb" }));
+app.use("/uploads/profiles", express.static(path.resolve(__dirname,"uploads/profiles"), { maxAge:"7d" }));
 
 app.get("/api/environment", async (req,res,next)=>{try{const pool=await getPool();const result=await pool.request().query(`SELECT DB_NAME() AS databaseName,SYSDATETIME() AS serverTime${process.env.APP_ENV==="sandbox"?",(SELECT business_datetime FROM dbo.sandbox_clock WHERE id=1) AS businessDateTime":""}`);res.json({success:true,appEnv:process.env.APP_ENV,databaseName:result.recordset[0].databaseName,serverTime:result.recordset[0].serverTime,businessDateTime:result.recordset[0].businessDateTime||null,sandboxInitialDateTime:process.env.SANDBOX_INITIAL_DATETIME||null,scheduleTestMode:process.env.APP_ENV==="sandbox"&&String(process.env.ENABLE_SCHEDULE_TEST_MODE).toLowerCase()==="true"})}catch(error){next(error)}});
 
@@ -26,6 +41,7 @@ app.use("/api/products", require("./routes/productRoutes"));
 app.use("/api/categories", require("./routes/categoryRoutes"));
 app.use("/api/suppliers", require("./routes/supplierRoutes"));
 app.use("/api/imports", require("./routes/importRoutes"));
+app.use("/api/purchase-orders", require("./routes/purchaseOrderRoutes"));
 app.use("/api/inventory-overview", require("./routes/inventoryRoutes"));
 app.use("/api/dashboard", require("./routes/dashboardRoutes"));
 app.use("/api/employee", require("./routes/employeeOperationsRoutes"));
@@ -33,6 +49,7 @@ app.use("/api/manager", require("./routes/employeeRoutes"));
 app.use("/api/operations", require("./routes/shiftOperationsRoutes"));
 app.use("/api/manager/operations", require("./routes/managerOperationsRoutes"));
 app.use("/api/chat", require("./routes/chatRoutes"));
+app.use("/api/branch-reports", require("./routes/branchReportRoutes"));
 app.use("/api/notifications", require("./routes/notificationCenterRoutes"));
 app.use("/api/shift-inventory", require("./routes/shiftInventoryRoutes"));
 app.use("/api/sandbox/inventory-counts", require("./routes/shiftInventoryRoutes"));

@@ -1,7 +1,11 @@
 import axiosClient from "./axiosClient";
 
 export const authApi = { login: (credentials) => axiosClient.post("/auth/login", credentials).then(r=>r.data) };
-export const profileApi = { get: () => axiosClient.get("/profile").then(r=>r.data) };
+export const profileApi = {
+  get: () => axiosClient.get("/profile").then(r=>r.data),
+  updatePersonal: payload => axiosClient.put("/profile/personal",payload).then(r=>r.data),
+  updateAvatar: file => { const data=new FormData();data.append("avatar",file);return axiosClient.post("/profile/avatar",data,{headers:{"Content-Type":"multipart/form-data"}}).then(r=>r.data) },
+};
 export const shiftApi = { today: () => axiosClient.get("/shifts/today").then(r=>r.data) };
 export const orderApi = {
   list: (params) => axiosClient.get("/orders", { params }).then(r=>r.data),
@@ -39,8 +43,21 @@ export const importApi = {
   remove: id => axiosClient.delete(`/imports/${id}`).then(r=>r.data),
   confirm: id => axiosClient.post(`/imports/${id}/confirm`).then(r=>r.data),
   adjust: (id,payload) => axiosClient.post(`/imports/${id}/adjustments`,payload).then(r=>r.data),
+  employeeOptions: () => axiosClient.get("/imports/employee/options").then(r=>r.data),
+  employeeCreate: payload => axiosClient.post("/imports/employee",payload).then(r=>r.data),
+  employeeDocument: (id,file) => {const body=new FormData();body.append("image",file);return axiosClient.post(`/imports/employee/${id}/document`,body,{headers:{"Content-Type":"multipart/form-data"}}).then(r=>r.data)},
+  documentFile: (id,documentId) => axiosClient.get(`/imports/${id}/documents/${documentId}`,{responseType:"blob"}).then(r=>r.data),
 };
-export const dashboardApi = { get: () => axiosClient.get("/dashboard").then(r=>r.data) };
+export const purchaseOrderApi = {
+  list: () => axiosClient.get("/purchase-orders").then(r=>r.data),
+  detail: id => axiosClient.get(`/purchase-orders/${id}`).then(r=>r.data),
+  create: payload => axiosClient.post("/purchase-orders",payload).then(r=>r.data),
+  update: (id,payload) => axiosClient.put(`/purchase-orders/${id}`,payload).then(r=>r.data),
+  remove: id => axiosClient.delete(`/purchase-orders/${id}`).then(r=>r.data),
+  pdf: id => axiosClient.get(`/purchase-orders/${id}/export.pdf`,{responseType:"blob"}).then(r=>r.data),
+  excel: id => axiosClient.get(`/purchase-orders/${id}/export.xlsx`,{responseType:"blob"}).then(r=>r.data),
+};
+export const dashboardApi = { get: params => axiosClient.get("/dashboard",{params}).then(r=>r.data) };
 export const inventoryOverviewApi = {
   list: params => axiosClient.get("/inventory-overview", { params }).then(r=>r.data),
   detail: (productId,params) => axiosClient.get(`/inventory-overview/${productId}/history`,{params}).then(r=>r.data),
@@ -72,22 +89,27 @@ export const sandboxAttendanceApi = {
   schedules: params => axiosClient.get("/sandbox/attendance-test/schedules",{params}).then(r=>r.data),
   generate: payload => axiosClient.post("/sandbox/attendance-test/generate",payload).then(r=>r.data),
 };
-export const operationApi={current:(date,scheduleId)=>axiosClient.get("/operations/shifts/current",{params:{...(date?{date}:{}),...(scheduleId?{scheduleId}:{})}}).then(r=>r.data),open:payload=>axiosClient.post("/operations/shifts/open",payload).then(r=>r.data),list:params=>axiosClient.get("/operations/shifts",{params}).then(r=>r.data),detail:id=>axiosClient.get(`/operations/shifts/${id}`).then(r=>r.data),eligibility:id=>axiosClient.get(`/operations/shifts/${id}/eligibility`).then(r=>r.data),report:id=>axiosClient.get(`/operations/shifts/${id}/report`).then(r=>r.data),saveReport:(id,payload)=>axiosClient.put(`/operations/shifts/${id}/report`,payload).then(r=>r.data),submitReport:(id,payload)=>axiosClient.post(`/operations/shifts/${id}/submit-report`,payload).then(r=>r.data),cashCount:id=>axiosClient.get(`/operations/shifts/${id}/cash-count`).then(r=>r.data),saveCashCount:(id,denominations)=>axiosClient.put(`/operations/shifts/${id}/cash-count`,{denominations}).then(r=>r.data),attachments:id=>axiosClient.get(`/operations/shifts/${id}/attachments`).then(r=>r.data),uploadAttachment:(id,file,attachmentType)=>{const form=new FormData();form.append("image",file);form.append("attachmentType",attachmentType);return axiosClient.post(`/operations/shifts/${id}/attachments`,form,{headers:{"Content-Type":"multipart/form-data"}}).then(r=>r.data)},removeAttachment:(id,attachmentId)=>axiosClient.delete(`/operations/shifts/${id}/attachments/${attachmentId}`).then(r=>r.data),handover:id=>axiosClient.get(`/operations/shifts/${id}/handover`).then(r=>r.data),receiveHandover:(id,payload)=>axiosClient.post(`/operations/shifts/${id}/receive-handover`,payload).then(r=>r.data),history:params=>axiosClient.get('/operations/reports/history',{params}).then(r=>r.data)};
-export const managerOperationApi={mappings:()=>axiosClient.get("/manager/operations/mappings").then(r=>r.data),saveMapping:payload=>axiosClient.put("/manager/operations/mappings",payload).then(r=>r.data),assignments:params=>axiosClient.get("/manager/operations/assignments",{params}).then(r=>r.data),assign:payload=>axiosClient.post("/manager/operations/assignments",payload).then(r=>r.data),overview:params=>axiosClient.get("/manager/operations/overview",{params}).then(r=>r.data),clock:()=>axiosClient.get("/manager/operations/clock").then(r=>r.data),updateClock:businessDateTime=>axiosClient.put("/manager/operations/clock",{businessDateTime}).then(r=>r.data),unlock:(id,reason)=>axiosClient.post(`/manager/operations/shifts/${id}/unlock`,{reason}).then(r=>r.data),lock:id=>axiosClient.post(`/manager/operations/shifts/${id}/lock`).then(r=>r.data),dashboard:params=>axiosClient.get('/manager/operations/dashboard',{params}).then(r=>r.data),timeline:params=>axiosClient.get('/manager/operations/timeline',{params}).then(r=>r.data),report:(period,params)=>axiosClient.get(`/manager/operations/reports/${period}`,{params}).then(r=>r.data),audit:id=>axiosClient.get(`/manager/operations/shifts/${id}/audit`).then(r=>r.data),exportUrl:(type,params)=>axiosClient.get(`/manager/operations/export/${type}`,{params,responseType:'blob'}).then(r=>r.data)};
-export const chatApi={channels:()=>axiosClient.get('/chat/channels').then(r=>r.data),messages:(id,params)=>axiosClient.get(`/chat/channels/${id}/messages`,{params}).then(r=>r.data),send:(id,payload)=>axiosClient.post(`/chat/channels/${id}/messages`,payload).then(r=>r.data),read:id=>axiosClient.put(`/chat/channels/${id}/read`).then(r=>r.data),remove:id=>axiosClient.delete(`/chat/messages/${id}`).then(r=>r.data)};
+export const operationApi={current:(date,scheduleId)=>axiosClient.get("/operations/shifts/current",{params:{...(date?{date}:{}),...(scheduleId?{scheduleId}:{})}}).then(r=>r.data),open:payload=>axiosClient.post("/operations/shifts/open",payload).then(r=>r.data),list:params=>axiosClient.get("/operations/shifts",{params}).then(r=>r.data),detail:id=>axiosClient.get(`/operations/shifts/${id}`).then(r=>r.data),eligibility:id=>axiosClient.get(`/operations/shifts/${id}/eligibility`).then(r=>r.data),report:id=>axiosClient.get(`/operations/shifts/${id}/report`).then(r=>r.data),saveReport:(id,payload)=>axiosClient.put(`/operations/shifts/${id}/report`,payload).then(r=>r.data),submitReport:(id,payload)=>axiosClient.post(`/operations/shifts/${id}/submit-report`,payload).then(r=>r.data),cashCount:id=>axiosClient.get(`/operations/shifts/${id}/cash-count`).then(r=>r.data),saveCashCount:(id,denominations)=>axiosClient.put(`/operations/shifts/${id}/cash-count`,{denominations}).then(r=>r.data),attachments:id=>axiosClient.get(`/operations/shifts/${id}/attachments`).then(r=>r.data),attachmentFile:(id,attachmentId)=>axiosClient.get(`/operations/shifts/${id}/attachments/${attachmentId}/file`,{responseType:"blob"}).then(r=>r.data),uploadAttachment:(id,file,attachmentType)=>{const form=new FormData();form.append("image",file);form.append("attachmentType",attachmentType);return axiosClient.post(`/operations/shifts/${id}/attachments`,form,{headers:{"Content-Type":"multipart/form-data"}}).then(r=>r.data)},removeAttachment:(id,attachmentId)=>axiosClient.delete(`/operations/shifts/${id}/attachments/${attachmentId}`).then(r=>r.data),handover:id=>axiosClient.get(`/operations/shifts/${id}/handover`).then(r=>r.data),receiveHandover:(id,payload)=>axiosClient.post(`/operations/shifts/${id}/receive-handover`,payload).then(r=>r.data),history:params=>axiosClient.get('/operations/reports/history',{params}).then(r=>r.data)};
+export const managerOperationApi={mappings:()=>axiosClient.get("/manager/operations/mappings").then(r=>r.data),saveMapping:payload=>axiosClient.put("/manager/operations/mappings",payload).then(r=>r.data),assignments:params=>axiosClient.get("/manager/operations/assignments",{params}).then(r=>r.data),assign:payload=>axiosClient.post("/manager/operations/assignments",payload).then(r=>r.data),overview:params=>axiosClient.get("/manager/operations/overview",{params}).then(r=>r.data),clock:()=>axiosClient.get("/manager/operations/clock").then(r=>r.data),updateClock:businessDateTime=>axiosClient.put("/manager/operations/clock",{businessDateTime}).then(r=>r.data),unlock:(id,reason)=>axiosClient.post(`/manager/operations/shifts/${id}/unlock`,{reason}).then(r=>r.data),lock:id=>axiosClient.post(`/manager/operations/shifts/${id}/lock`).then(r=>r.data),dashboard:params=>axiosClient.get('/manager/operations/dashboard',{params}).then(r=>r.data),timeline:params=>axiosClient.get('/manager/operations/timeline',{params}).then(r=>r.data),report:(period,params)=>axiosClient.get(`/manager/operations/reports/${period}`,{params}).then(r=>r.data),audit:id=>axiosClient.get(`/manager/operations/shifts/${id}/audit`).then(r=>r.data),shiftPdf:id=>axiosClient.get(`/manager/operations/shifts/${id}/export/pdf`,{responseType:"blob"}).then(r=>r.data),exportUrl:(type,params)=>axiosClient.get(`/manager/operations/export/${type}`,{params,responseType:'blob'}).then(r=>r.data)};
+export const chatApi={channels:()=>axiosClient.get('/chat/channels').then(r=>r.data),createChannel:payload=>axiosClient.post('/chat/channels',payload).then(r=>r.data),messages:(id,params)=>axiosClient.get(`/chat/channels/${id}/messages`,{params}).then(r=>r.data),send:(id,payload)=>axiosClient.post(`/chat/channels/${id}/messages`,payload).then(r=>r.data),read:id=>axiosClient.put(`/chat/channels/${id}/read`).then(r=>r.data),remove:id=>axiosClient.delete(`/chat/messages/${id}`).then(r=>r.data)};
+export const branchReportApi={list:params=>axiosClient.get('/branch-reports',{params}).then(r=>r.data),create:payload=>axiosClient.post('/branch-reports',payload).then(r=>r.data),review:(id,status)=>axiosClient.put(`/branch-reports/${id}/review`,{status}).then(r=>r.data)};
 export const notificationCenterApi={list:()=>axiosClient.get('/notifications').then(r=>r.data),read:id=>axiosClient.put(`/notifications/${id}/read`).then(r=>r.data),readAll:()=>axiosClient.put('/notifications/read-all').then(r=>r.data)};
 export const managerEmployeeApi = {
   list: (params) => axiosClient.get("/manager/employees", { params }).then(r=>r.data),
   get: (id) => axiosClient.get(`/manager/employees/${id}`).then(r=>r.data),
   create: (payload) => axiosClient.post("/manager/employees", payload).then(r=>r.data),
   update: (id,payload) => axiosClient.put(`/manager/employees/${id}`, payload).then(r=>r.data),
+  updateAvatar: (id,file) => {const data=new FormData();data.append("avatar",file);return axiosClient.post(`/manager/employees/${id}/avatar`,data,{headers:{"Content-Type":"multipart/form-data"}}).then(r=>r.data)},
   accountStatus: (id,status) => axiosClient.patch(`/manager/employees/${id}/account-status`, {status}).then(r=>r.data),
   resetPassword: (id,newPassword) => axiosClient.patch(`/manager/employees/${id}/reset-password`, {newPassword}).then(r=>r.data),
+  profileUpdateLock: (id,locked) => axiosClient.patch(`/manager/employees/${id}/profile-update-lock`, {locked}).then(r=>r.data),
   resign: (id,note) => axiosClient.patch(`/manager/employees/${id}/resign`, {note}).then(r=>r.data),
   branches: () => axiosClient.get("/manager/branches").then(r=>r.data),
   positions: () => axiosClient.get("/manager/positions").then(r=>r.data),
   createBranch: payload => axiosClient.post("/manager/branches",payload).then(r=>r.data),
   updateBranchName: (id,branchName) => axiosClient.patch(`/manager/branches/${id}/name`,{branchName}).then(r=>r.data),
+  updateBranch: (id,payload) => axiosClient.patch(`/manager/branches/${id}`,payload).then(r=>r.data),
+  deleteBranch: id => axiosClient.delete(`/manager/branches/${id}`).then(r=>r.data),
   employeeBranches: params => axiosClient.get("/manager/employee-branches",{params}).then(r=>r.data),
   remove: id => axiosClient.delete(`/manager/employees/${id}`).then(r=>r.data),
 };
@@ -115,6 +137,7 @@ export const employeeApi = {
 export const scheduleRegistrationApi = {
   periods: () => axiosClient.get("/manager/schedule-registration-periods").then(r=>r.data),
   create: payload => axiosClient.post("/manager/schedule-registration-periods",payload).then(r=>r.data),
+  createAll: payload => axiosClient.post("/manager/schedule-registration-periods/all",payload).then(r=>r.data),
   detail: id => axiosClient.get(`/manager/schedule-registration-periods/${id}`).then(r=>r.data),
   update: (id,payload) => axiosClient.put(`/manager/schedule-registration-periods/${id}`,payload).then(r=>r.data),
   remove: id => axiosClient.delete(`/manager/schedule-registration-periods/${id}`).then(r=>r.data),
