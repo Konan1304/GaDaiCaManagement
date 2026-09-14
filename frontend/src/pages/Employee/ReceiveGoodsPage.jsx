@@ -1,6 +1,7 @@
 import {useEffect,useState} from "react";
 import {FiPlus,FiTrash2} from "react-icons/fi";
 import {importApi} from "../../api/services";
+import VietnamDateInput from "../../components/VietnamDateInput";
 import "../../styles/shift-inventory.css";
 
 const empty=()=>({productId:"",orderedQuantity:"",note:""});
@@ -19,7 +20,7 @@ export default function ReceiveGoodsPage(){
   <form className="si-card employee-receipt-form" onSubmit={submit}>
    <div className="employee-receipt-head">
     <label>Nhà cung cấp *<select required value={form.supplierId} onChange={e=>setForm({...form,supplierId:e.target.value})}><option value="">Chọn nhà cung cấp</option>{options.suppliers.map(x=><option key={x.supplierId} value={x.supplierId}>{x.supplierName}</option>)}<option value="other">Khác</option></select></label>
-    <label>Ngày nhận hàng *<input required type="date" value={form.receiptDate} onChange={e=>setForm({...form,receiptDate:e.target.value})}/></label>
+    <label>Ngày nhận hàng *<VietnamDateInput required value={form.receiptDate} onChange={e=>setForm({...form,receiptDate:e.target.value})}/></label>
    </div>
    <div className="si-section-title"><h3>Hàng nhận từ nhà cung cấp</h3><button type="button" className="si-secondary" onClick={()=>setForm({...form,items:[...form.items,empty()]})}><FiPlus/> Thêm dòng</button></div>
    <div className="employee-receipt-items">{form.items.map((row,index)=><div className="employee-receipt-row" key={index}>

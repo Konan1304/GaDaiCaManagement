@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
-import { FiActivity, FiBarChart2, FiChevronLeft, FiGitBranch, FiRefreshCw, FiTrendingDown, FiTrendingUp } from "react-icons/fi";
+import { FiActivity, FiBarChart2, FiCalendar, FiChevronLeft, FiGitBranch, FiRefreshCw, FiTrendingDown, FiTrendingUp } from "react-icons/fi";
 import { managerEmployeeApi, managerOperationApi } from "../../api/services";
 import "../../styles/report-analytics.css";
 import "../../styles/report-overview.css";
 import "../../styles/report-comparison.css";
+import "../../styles/report-date-picker.css";
 import OperationalReports from "./OperationalReports";
+import { vietnamToday } from "../../utils/vietnamTime";
+import VietnamDateInput from "../../components/VietnamDateInput";
 
 const money = value => `${Number(value || 0).toLocaleString("vi-VN")}đ`;
 const total = (items, field = "totalRevenue") => items.reduce((sum, item) => sum + Number(item[field] || 0), 0);
@@ -36,7 +39,7 @@ function MonthlyComparisonChart({ rows, month, previous }) {
 }
 
 function RevenueReportsPage() {
-  const [month, setMonth] = useState("2026-06"), year = Number(month.slice(0, 4));
+  const [reportDate, setReportDate] = useState("2026-08-01"), month = reportDate.slice(0, 7), year = Number(month.slice(0, 4));
   const [branches, setBranches] = useState([]), [branchId, setBranchId] = useState("");
   const [compareMode, setCompareMode] = useState("month"), [comparisonBranchId, setComparisonBranchId] = useState("");
   const [current, setCurrent] = useState([]), [previous, setPrevious] = useState([]), [annual, setAnnual] = useState([]), [priorAnnual, setPriorAnnual] = useState([]);
@@ -55,7 +58,7 @@ function RevenueReportsPage() {
   const days = useMemo(()=>{const grouped={};visible.forEach(item=>{grouped[item.businessDate]=(grouped[item.businessDate]||0)+Number(item.totalRevenue||0)});return Object.entries(grouped).sort(([a],[b])=>a.localeCompare(b))},[visible]);
   const maxDay=Math.max(...days.map(([,value])=>value),1), annualRevenue=total(annual), priorAnnualRevenue=total(priorAnnual), annualGrowth=growth(annualRevenue,priorAnnualRevenue);
   return <div className={`shift-analytics ${branchId?"branch-detail":"branch-overview"}`}>
-    <section className="card shift-analytics-head"><div>{branchId&&<button className="shift-back" onClick={()=>setBranchId("")}><FiChevronLeft/> Tất cả chi nhánh</button>}<h1>{branchId?`Báo cáo — ${selectedBranch?.branchName}`:"Báo cáo doanh thu"}</h1><p>Thống kê trực tiếp từ các báo cáo ca đã kết và gửi lên hệ thống.</p></div><div className="shift-report-controls"><label>Tháng xem<input type="month" value={month} onChange={event=>setMonth(event.target.value)}/></label>{!branchId&&<><label>Kiểu so sánh<select value={compareMode} onChange={event=>setCompareMode(event.target.value)} style={{height:40,padding:"0 12px",border:"1px solid #e5e5e5",borderRadius:9,minWidth:150}}><option value="month">So sánh tháng</option><option value="year">So sánh năm</option></select></label><label>Chi nhánh<select value={comparisonBranchId} onChange={event=>setComparisonBranchId(event.target.value)} style={{height:40,padding:"0 12px",border:"1px solid #e5e5e5",borderRadius:9,minWidth:190}}><option value="">Tất cả chi nhánh</option>{branches.map(branch=><option key={branch.id} value={branch.id}>{branch.branchName}</option>)}</select></label></>}<button className="btn btn-light" onClick={load}><FiRefreshCw/> Tải lại</button></div></section>
+    <section className="card shift-analytics-head"><div>{branchId&&<button className="shift-back" onClick={()=>setBranchId("")}><FiChevronLeft/> Tất cả chi nhánh</button>}<h1>{branchId?`Báo cáo — ${selectedBranch?.branchName}`:"Báo cáo doanh thu"}</h1><p>Thống kê trực tiếp từ các báo cáo ca đã kết và gửi lên hệ thống.</p></div><div className="shift-report-controls"><label>Ngày thuộc tháng xem<VietnamDateInput value={reportDate} onChange={event=>event.target.value&&setReportDate(event.target.value)}/></label><button type="button" className="report-current-date" onClick={()=>setReportDate(vietnamToday())}><FiCalendar/> Hiện tại</button>{!branchId&&<><label>Kiểu so sánh<select value={compareMode} onChange={event=>setCompareMode(event.target.value)} style={{height:40,padding:"0 12px",border:"1px solid #e5e5e5",borderRadius:9,minWidth:150}}><option value="month">So sánh tháng</option><option value="year">So sánh năm</option></select></label><label>Chi nhánh<select value={comparisonBranchId} onChange={event=>setComparisonBranchId(event.target.value)} style={{height:40,padding:"0 12px",border:"1px solid #e5e5e5",borderRadius:9,minWidth:190}}><option value="">Tất cả chi nhánh</option>{branches.map(branch=><option key={branch.id} value={branch.id}>{branch.branchName}</option>)}</select></label></>}<button className="btn btn-light" onClick={load}><FiRefreshCw/> Tải lại</button></div></section>
     {error&&<div className="manager-form-error">{error}</div>}{loading?<section className="card shift-report-empty">Đang tải báo cáo...</section>:<>
       {!branchId&&<>
         <section className="shift-report-stats"><article className="card"><small>Doanh thu {monthLabel(month)}</small><b>{money(revenue)}</b></article><article className="card"><small>{monthLabel(previousMonth(month))}</small><b>{money(oldRevenue)}</b></article><article className={`card ${monthGrowth<0?"down":"up"}`}><small>So với tháng trước</small><b>{monthGrowth<0?<FiTrendingDown/>:<FiTrendingUp/>}{percent(monthGrowth)}</b></article><article className="card"><small>Số báo cáo ca</small><b>{visible.length}</b></article></section>

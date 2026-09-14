@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { FiArchive, FiArrowDownCircle, FiArrowUpCircle, FiBox, FiEye, FiSearch, FiX } from "react-icons/fi";
 import { useSearchParams } from "react-router-dom";
+import VietnamDateInput from "../../components/VietnamDateInput";
 import { inventoryOverviewApi } from "../../api/services";
 import ProductsPage from "./InventoryHistoryPage";
 import InventoryTransactionsPage from "./InventoryTransactionsPage";
@@ -61,8 +62,8 @@ export default function InventoryPage(){
     {activeTab==="products"?<ProductsPage embedded/>:activeTab==="transactions"?<InventoryTransactionsPage key={refreshKey} branches={data.branches} defaultBranchId={filters.branchId||data.selectedBranchId} period={data.period||dates} onChanged={()=>setRefreshKey(value=>value+1)}/>:activeTab==="inventory-book"?<ShiftInventoryAdminPage embedded/>:<>
     <form className="card inventory-filters" onSubmit={submit}>
       <label>Chi nhánh<select value={filters.branchId} onChange={e=>setFilters(v=>({...v,branchId:e.target.value,page:1}))}>{data.branches.map(x=><option key={x.id} value={x.id}>{x.branchName}</option>)}</select></label>
-      <label>Từ ngày<input type="date" value={draft.dateFrom} max={draft.dateTo} onChange={e=>setDraft(v=>({...v,dateFrom:e.target.value}))}/></label>
-      <label>Đến ngày<input type="date" value={draft.dateTo} min={draft.dateFrom} onChange={e=>setDraft(v=>({...v,dateTo:e.target.value}))}/></label>
+      <label>Từ ngày<VietnamDateInput value={draft.dateFrom} max={draft.dateTo} onChange={e=>setDraft(v=>({...v,dateFrom:e.target.value}))}/></label>
+      <label>Đến ngày<VietnamDateInput value={draft.dateTo} min={draft.dateFrom} onChange={e=>setDraft(v=>({...v,dateTo:e.target.value}))}/></label>
       <label className="inventory-search">Tìm sản phẩm<div><FiSearch/><input value={draft.search} onChange={e=>setDraft(v=>({...v,search:e.target.value}))} placeholder="Tên hoặc mã sản phẩm"/></div></label>
       <button className="btn btn-primary">Lọc dữ liệu</button>
     </form>

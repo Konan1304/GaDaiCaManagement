@@ -1,4 +1,5 @@
 database/backups/
+backups/
 backend/server-output.log
 backend/server-error.log
 backend/uploads/

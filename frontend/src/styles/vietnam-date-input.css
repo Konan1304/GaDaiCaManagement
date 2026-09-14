@@ -1,0 +1,72 @@
+.vietnam-date-picker {
+  position: relative;
+  display: flex;
+  width: 100%;
+  min-width: 170px;
+  height: 43px;
+  overflow: hidden;
+  border: 1px solid #ddd;
+  border-radius: 9px;
+  background: #fff;
+}
+
+.vietnam-date-picker .vietnam-date-picker-display {
+  flex: 1;
+  min-width: 0;
+  width: auto;
+  height: 100%;
+  margin: 0;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 0;
+  outline: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.vietnam-date-picker .vietnam-date-picker-native {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.vietnam-date-picker:focus-within {
+  border-color: #f1b500;
+  box-shadow: 0 0 0 2px rgba(255, 192, 0, .16);
+}
+
+.vietnam-date-picker > button {
+  flex: 0 0 42px;
+  width: 42px;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  border-left: 1px solid #e5e5e5;
+  border-radius: 0;
+  background: #fff8df;
+  color: #a87500;
+  display: grid;
+  place-items: center;
+  font-size: 17px;
+}
+
+.vietnam-date-picker > button:hover {
+  background: #ffc000;
+  color: #111;
+}
+
+.operation-dashboard-toolbar > .vietnam-date-picker {
+  width: 220px;
+  min-width: 220px;
+  flex: 0 0 220px;
+}
+
+@media (max-width: 700px) {
+  .operation-dashboard-toolbar > .vietnam-date-picker {
+    width: 100%;
+    min-width: 0;
+    flex-basis: auto;
+  }
+}

@@ -13,6 +13,7 @@ const nav=[
 ];
 const isSandbox=import.meta.env.VITE_APP_ENV==="sandbox";
 const titles={schedule:"Lịch làm việc",attendance:"Chấm công",shift:"Báo cáo doanh thu","shift-inventory":"Kiểm xuất trong ca","receive-goods":"Nhập hàng vào kho",payroll:"Lương của tôi",expenses:"Chi phí","shift-closing":"Đóng ca","shift-report":"Báo cáo doanh thu","shift-registration":"Đăng ký ca","leave-request":"Xin nghỉ",notifications:"Thông báo","notification-center":"Thông báo",profile:"Hồ sơ"};
+titles.reports="Báo cáo chi nhánh";
 
 export default function EmployeeLayout(){
   const navigate=useNavigate(),location=useLocation();

@@ -12,7 +12,7 @@ function CategoryModal({mode,item,onClose,onSaved}){
  const submit=async event=>{event.preventDefault();setSaving(true);setError("");try{
    const response=item?await categoryApi.update(item.categoryId,form):await categoryApi.create(form);onSaved(response.message);
   }catch(e){setError(e.response?.data?.message||"Không thể lưu danh mục.");setSaving(false)}};
- return <div className="manager-modal-backdrop" onMouseDown={event=>event.target===event.currentTarget&&onClose()}><div className={`employee-modal category-modal ${mode==="view"?"category-view-modal":""}`}>
+ return <div className="manager-modal-backdrop" onMouseDown={event=>event.target===event.currentTarget&&onClose()}><div className={`employee-modal category-modal ${mode==="view"?"category-view-modal":"category-editor-modal"}`}>
   <header><div className="category-modal-heading">{mode==="view"&&<span><FiTag/></span>}<div><h2>{mode==="view"?"Chi tiết danh mục":item?"Sửa danh mục":"Thêm danh mục"}</h2><p>{mode==="view"?"Thông tin và các sản phẩm đang thuộc danh mục.":"Thông tin được lưu trực tiếp vào SQL Server."}</p></div></div><button onClick={onClose}><FiX/></button></header>
   {error&&<div className="manager-form-error">{error}</div>}
   {mode==="view"?detail&&<div className="category-detail">

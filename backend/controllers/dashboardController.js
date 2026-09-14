@@ -12,7 +12,8 @@ async function getDashboard(req,res,next){try{
   const pool=await getPool(),clock=await businessNow(pool),scope=await managerBranch(pool,req.user);
   if(scope===-1)return res.status(403).json({success:false,message:"Tài khoản quản lý chưa được gán chi nhánh."});
   const requested=Number(req.query.branchId||0),branchId=scope||((Number.isInteger(requested)&&requested>0)?requested:0),isTest=isTestEnvironment();
-  const request=pool.request().input("date",sql.Date,clock.businessDate).input("isTest",sql.Bit,isTest);
+  const selectedDate=/^\d{4}-\d{2}-\d{2}$/.test(req.query.date||"")?req.query.date:clock.businessDate;
+  const request=pool.request().input("date",sql.Date,selectedDate).input("isTest",sql.Bit,isTest);
   if(branchId)request.input("branchId",sql.Int,branchId);
   const branch=(alias)=>branchId?` AND ${alias}.branch_id=@branchId`:"";
   const result=await request.query(`
@@ -45,9 +46,9 @@ async function getDashboard(req,res,next){try{
 
     SELECT TOP 6 ss.id shiftSessionId,CONVERT(char(10),ss.business_date,23) businessDate,ss.operation_shift_code operationShift,ss.status,ss.branch_id branchId,b.branch_name branchName,u.full_name leaderName,r.total_revenue totalRevenue,r.order_count orderCount,r.difference_amount differenceAmount,r.status reportStatus,r.submitted_at submittedAt
     FROM shift_sessions ss JOIN branches b ON b.id=ss.branch_id LEFT JOIN employees e ON e.id=ss.leader_employee_id LEFT JOIN users u ON u.id=e.user_id LEFT JOIN shift_closing_reports r ON r.shift_session_id=ss.id AND r.is_test=@isTest
-    WHERE ss.is_test=@isTest AND ss.operation_shift_code IN('morning','evening')${branch("ss")} ORDER BY ss.business_date DESC,ss.id DESC;
+    WHERE ss.is_test=@isTest AND ss.business_date<=@date AND ss.operation_shift_code IN('morning','evening')${branch("ss")} ORDER BY ss.business_date DESC,ss.id DESC;
   `);
   const summary=result.recordsets[1][0]||{},tasks=result.recordsets[4][0]||{};
-  res.json({success:true,data:{businessDate:clock.businessDate,branchId:branchId||null,branches:result.recordsets[0],summary:{totalRevenue:Number(summary.totalRevenue||0),orderCount:Number(summary.orderCount||0),cashDifference:Number(summary.cashDifference||0),scheduledEmployees:Number(summary.scheduledEmployees||0),checkedInEmployees:Number(summary.checkedInEmployees||0),lowStockCount:Number(summary.lowStockCount||0)},shifts:result.recordsets[2],revenueDays:result.recordsets[3].map(x=>({...x,totalRevenue:Number(x.totalRevenue||0)})),tasks:Object.fromEntries(Object.entries(tasks).map(([key,value])=>[key,Number(value||0)])),recentReports:result.recordsets[5]}});
+  res.json({success:true,data:{businessDate:selectedDate,branchId:branchId||null,branches:result.recordsets[0],summary:{totalRevenue:Number(summary.totalRevenue||0),orderCount:Number(summary.orderCount||0),cashDifference:Number(summary.cashDifference||0),scheduledEmployees:Number(summary.scheduledEmployees||0),checkedInEmployees:Number(summary.checkedInEmployees||0),lowStockCount:Number(summary.lowStockCount||0)},shifts:result.recordsets[2],revenueDays:result.recordsets[3].map(x=>({...x,totalRevenue:Number(x.totalRevenue||0)})),tasks:Object.fromEntries(Object.entries(tasks).map(([key,value])=>[key,Number(value||0)])),recentReports:result.recordsets[5]}});
 }catch(error){next(error)}}
 module.exports={getDashboard};

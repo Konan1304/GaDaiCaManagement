@@ -6,6 +6,8 @@ const {sql,getPool}=require("../config/db");
 
 const workbookPath=path.resolve(__dirname,"../../database/lich-lam-thang-8.xlsx");
 const apply=process.argv.includes("--apply");
+const branchArg=(process.argv.find(value=>value.startsWith("--branch="))||"").split("=")[1]?.toUpperCase()||"";
+const employeeCodeAliases=new Map([["1","NV001"],["2","NV002"]]);
 const importNote="Nhập từ lịch làm.xlsx tháng 08/2026";
 const codeTimes={A:"08:00-16:00",B:"16:00-23:00",P1:"08:00-12:00",P2:"12:00-17:00",P3:"17:00-23:00"};
 
@@ -69,7 +71,7 @@ async function parseWorkbook(){
 }
 
 async function main(){
-  const source=await parseWorkbook(),pool=await getPool();
+  const parsed=await parseWorkbook(),source=branchArg?parsed.filter(row=>row.branchCode===branchArg):parsed,pool=await getPool();
   const lookup=await pool.request().query(`
     SELECT e.id employeeId,e.employee_code employeeCode,e.user_id userId,u.full_name fullName,b.branch_code homeBranchCode
     FROM employees e JOIN users u ON u.id=e.user_id JOIN branches b ON b.id=e.branch_id;
@@ -81,8 +83,9 @@ async function main(){
   const employees=new Map(lookup.recordsets[0].map(row=>[String(row.employeeCode).toUpperCase(),row]));
   const branches=new Map(lookup.recordsets[1].map(row=>[row.branchCode,row]));
   const shifts=lookup.recordsets[2],adminId=lookup.recordsets[3][0]?.userId;
-  const missing=[...new Set(source.filter(row=>!employees.has(row.employeeCode.toUpperCase())).map(row=>`${row.employeeCode} (${row.employeeName})`))];
-  const valid=source.filter(row=>employees.has(row.employeeCode.toUpperCase())&&branches.has(row.branchCode));
+  const resolvedCode=row=>employeeCodeAliases.get(row.employeeCode.toUpperCase())||row.employeeCode.toUpperCase();
+  const missing=[...new Set(source.filter(row=>!employees.has(resolvedCode(row))).map(row=>`${row.employeeCode} (${row.employeeName})`))];
+  const valid=source.filter(row=>employees.has(resolvedCode(row))&&branches.has(row.branchCode));
   const summary={sourceRows:source.length,validRows:valid.length,existingAugustSchedules:lookup.recordsets[4][0].existingCount,availableBranches:lookup.recordsets[1],missingBranchCodes:[...new Set(source.filter(row=>!branches.has(row.branchCode)).map(row=>row.branchCode))],missingEmployees:missing,byBranch:{},byEmployee:{}};
   for(const row of valid){summary.byBranch[row.branchCode]=(summary.byBranch[row.branchCode]||0)+1;summary.byEmployee[row.employeeCode]=(summary.byEmployee[row.employeeCode]||0)+1}
   if(!apply){console.log(JSON.stringify(summary,null,2));await pool.close();return}
@@ -91,7 +94,7 @@ async function main(){
   try{
     await transaction.begin();begun=true;
     for(const row of valid){
-      const employee=employees.get(row.employeeCode.toUpperCase()),branch=branches.get(row.branchCode);
+      const employee=employees.get(resolvedCode(row)),branch=branches.get(row.branchCode);
       const startMinutes=Number(row.start.slice(0,2))*60+Number(row.start.slice(3));
       const baseShift=shifts.reduce((best,current)=>{
         const currentMinutes=Number(current.startTime.slice(0,2))*60+Number(current.startTime.slice(3));
@@ -102,7 +105,7 @@ async function main(){
         .input("start",sql.Time,row.start).input("end",sql.Time,row.end).input("note",sql.NVarChar(500),importNote).input("adminId",sql.Int,adminId)
         .input("minutes",sql.Int,row.minutes);
       const result=await request.query(`
-        DECLARE @scheduleId INT=(SELECT TOP 1 id FROM employee_schedules WHERE employee_id=@employeeId AND work_date=@date AND ISNULL(is_test,0)=0 ORDER BY id);
+        DECLARE @scheduleId INT=(SELECT TOP 1 id FROM employee_schedules WHERE employee_id=@employeeId AND branch_id=@branchId AND work_date=@date AND ISNULL(is_test,0)=0 ORDER BY id);
         IF @scheduleId IS NULL BEGIN
           INSERT employee_schedules(employee_id,shift_id,branch_id,work_date,display_code,start_time_override,end_time_override,note,status,is_test,created_by)
           VALUES(@employeeId,@shiftId,@branchId,@date,@display,@start,@end,@note,'completed',0,@adminId);

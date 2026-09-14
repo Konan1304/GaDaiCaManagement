@@ -1,6 +1,7 @@
 const { loadEnvironment } = require("./config/env");
 loadEnvironment();
 const express = require("express");
+const http = require("http");
 const path = require("path");
 const cors = require("cors");
 const { connectDatabase, getPool } = require("./config/db");
@@ -8,6 +9,8 @@ const { loadModels } = require("./models");
 const { createCrudRouter } = require("./routes/crudRoutes");
 
 const app = express();
+const httpServer=http.createServer(app);
+require('./services/chatRealtimeService').initialize(httpServer);
 app.disable("x-powered-by");
 const allowedOrigins = process.env.CORS_ORIGIN.split(",").map((value) => value.trim()).filter(Boolean);
 const isLanFrontendOrigin = (origin) => {
@@ -51,6 +54,7 @@ app.use("/api/manager/operations", require("./routes/managerOperationsRoutes"));
 app.use("/api/chat", require("./routes/chatRoutes"));
 app.use("/api/branch-reports", require("./routes/branchReportRoutes"));
 app.use("/api/notifications", require("./routes/notificationCenterRoutes"));
+app.use("/api/settings", require("./routes/systemSettingsRoutes"));
 app.use("/api/shift-inventory", require("./routes/shiftInventoryRoutes"));
 app.use("/api/sandbox/inventory-counts", require("./routes/shiftInventoryRoutes"));
 require("./services/operationOutboxWorker").start();
@@ -64,7 +68,7 @@ const crudMappings = {
   users:"users", roles:"roles", branches:"branches", positions:"positions", employees:"employees",
   schedules:"schedules", attendance:"attendance",
   "import-details":"import_details", "order-items":"order_items",
-  "cash-reports":"cash_reports", notifications:"notifications", settings:"settings",
+  "cash-reports":"cash_reports", notifications:"notifications",
   units:"units", "leave-requests":"leave_requests", "attendance-devices":"attendance_devices",
   inventory:"branch_inventories", "inventory-transactions":"inventory_transactions",
   "shift-sessions":"shift_sessions", payments:"payments", "expense-categories":"expense_categories",
@@ -80,5 +84,5 @@ app.use((req,res)=>res.status(404).json({success:false,message:"Không tìm th�
 app.use((error,req,res,next)=>{console.error(error);if(error.number===2601||error.number===2627)return res.status(409).json({success:false,message:"Dữ liệu đã tồn tại"});if(error.number===547)return res.status(400).json({success:false,message:"Dữ liệu liên kết không hợp lệ"});return res.status(500).json({success:false,message:process.env.NODE_ENV==="production"?"Lỗi máy chủ":error.message})});
 
 const port=Number(process.env.PORT)||5000;
-connectDatabase().then(async()=>{const models=await loadModels();console.log(`Đã map ${new Set(Object.values(models).map(model=>model.tableName)).size} bảng SQL Server`);app.listen(port,()=>console.log(`Backend đang chạy tại http://localhost:${port}`))}).catch(error=>{console.error("Không thể khởi động backend:",error.message);process.exit(1)});
+connectDatabase().then(async()=>{const models=await loadModels();console.log(`Đã map ${new Set(Object.values(models).map(model=>model.tableName)).size} bảng SQL Server`);httpServer.listen(port,()=>console.log(`Backend đang chạy tại http://localhost:${port}`))}).catch(error=>{console.error("Không thể khởi động backend:",error.message);process.exit(1)});
 module.exports=app;

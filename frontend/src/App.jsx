@@ -1,4 +1,5 @@
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { useEffect } from "react";
 import LoginPage from "./pages/Auth/LoginPage";
 import ManagerLayout from "./layouts/ManagerLayout";
 import EmployeeLayout from "./layouts/EmployeeLayout";
@@ -38,10 +39,33 @@ import NotificationCenterPage from "./pages/Shared/NotificationCenterPage";
 import ShiftInventoryPage from "./pages/Employee/ShiftInventoryPage";
 import ShiftInventoryAdminPage from "./pages/Manager/ShiftInventoryAdminPage";
 import ReceiveGoodsPage from "./pages/Employee/ReceiveGoodsPage";
+import EmployeeOperationalReportsPage from "./pages/Employee/OperationalReportsPage";
 
 const isSandbox=import.meta.env.VITE_APP_ENV==="sandbox";
 
 export default function App() {
+  useEffect(() => {
+    const isPicker = target => target instanceof HTMLInputElement && ["date", "month", "datetime-local"].includes(target.type);
+    const open = event => {
+      if (isPicker(event.target)) event.target.showPicker?.();
+    };
+    const blockTyping = event => {
+      if (isPicker(event.target) && !["Tab", "Escape"].includes(event.key)) event.preventDefault();
+    };
+    const blockInsert = event => {
+      if (isPicker(event.target)) event.preventDefault();
+    };
+    document.addEventListener("click", open, true);
+    document.addEventListener("keydown", blockTyping, true);
+    document.addEventListener("paste", blockInsert, true);
+    document.addEventListener("drop", blockInsert, true);
+    return () => {
+      document.removeEventListener("click", open, true);
+      document.removeEventListener("keydown", blockTyping, true);
+      document.removeEventListener("paste", blockInsert, true);
+      document.removeEventListener("drop", blockInsert, true);
+    };
+  }, []);
   return <BrowserRouter><Routes>
     <Route path="/login" element={<LoginPage />} />
     <Route element={<ProtectedRoute />}>
@@ -73,7 +97,7 @@ export default function App() {
         <Route path="reports" element={<ReportsPage />} />
         <Route path="payrolls" element={<PayrollPage />} />
         <Route path="payrolls/:employeeId" element={<PayrollDetailPage />} />
-        <Route path="notifications" element={<ManagerUtilityPage type="notifications" />} />
+        <Route path="notifications" element={<Navigate to="/manager/notification-center" replace />} />
         <Route path="settings" element={<ManagerUtilityPage type="settings" />} />
       </Route>
     </Route>
@@ -95,6 +119,7 @@ export default function App() {
         <Route path="profile" element={<ProfilePage />} />
         <Route path="payroll" element={<EmployeePayrollPage />} />
         <Route path="chat" element={<InternalChatPage />} />
+        <Route path="reports" element={<EmployeeOperationalReportsPage />} />
         <Route path="shift-inventory" element={<ShiftInventoryPage />} />
         <Route path="receive-goods" element={<ReceiveGoodsPage />} />
         <Route path="notification-center" element={<NotificationCenterPage />} />

@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { FiChevronLeft, FiClock, FiDownload, FiEye, FiGitBranch, FiRefreshCw, FiSearch, FiUsers, FiX } from "react-icons/fi";
 import { managerEmployeeApi, managerOperationApi, operationApi } from "../../api/services";
+import VietnamDateInput from "../../components/VietnamDateInput";
+import {vietnamDateTime,vietnamToday} from "../../utils/vietnamTime";
 import "../../styles/operation-detail.css";
 
 const cash = value => `${Number(value || 0).toLocaleString("vi-VN")}đ`;
@@ -29,7 +31,7 @@ function DetailModal({ report, onClose }) {
 }
 
 export default function OperationDashboardPage() {
-  const [date, setDate] = useState("2026-06-01");
+  const [date, setDate] = useState(vietnamToday);
   const [data, setData] = useState({ items: [], summary: {} });
   const [timeline, setTimeline] = useState([]);
   const [selected, setSelected] = useState(null);
@@ -92,7 +94,7 @@ export default function OperationDashboardPage() {
     {error && <div className="manager-form-error">{error}</div>}
     <button type="button" className="attendance-back-branches" onClick={()=>setBranchId("")}><FiChevronLeft/> Tất cả chi nhánh</button>
     <span className="attendance-current-branch">{selectedBranch?.branchName||"Chi nhánh"}</span>
-    <section className="card operation-dashboard-toolbar"><div><h1>Báo cáo ca</h1><p>Chỉ hiển thị những ca đã kết và gửi báo cáo</p></div><input type="date" value={date} onChange={event => setDate(event.target.value)} /><button className="btn btn-light" onClick={load}><FiRefreshCw /> Tải lại</button><button className="btn btn-yellow" onClick={() => download("excel")}><FiDownload /> Excel</button><button className="btn btn-dark" onClick={() => download("pdf")}><FiDownload /> PDF</button></section>
+    <section className="card operation-dashboard-toolbar"><div><h1>Báo cáo ca</h1><p>Chỉ hiển thị những ca đã kết và gửi báo cáo</p></div><VietnamDateInput value={date} onChange={event => setDate(event.target.value)} /><button className="btn btn-light" onClick={load}><FiRefreshCw /> Tải lại</button><button className="btn btn-yellow" onClick={() => download("excel")}><FiDownload /> Excel</button><button className="btn btn-dark" onClick={() => download("pdf")}><FiDownload /> PDF</button></section>
     <div className="operation-summary">{[["Tổng doanh thu", data.summary.totalRevenue], ["Tiền mặt", data.summary.cashRevenue], ["Doanh thu ứng dụng", appRevenue], ["Chênh lệch quỹ", data.summary.differenceAmount]].map(([label, value]) => <article className="card" key={label}><small>{label}</small><b>{cash(value)}</b></article>)}</div>
     <section className="card operation-daily-breakdown">
       <header><div><small>CHI TIẾT DOANH THU NGÀY</small><h2>{date.split("-").reverse().join("/")}</h2></div><strong>Tổng cả ngày: {cash(data.summary.totalRevenue)}</strong></header>
@@ -105,7 +107,7 @@ export default function OperationDashboardPage() {
       })}</div>
     </section>
     {!data.items.length && <section className="card operation-dashboard-empty">Ngày này chưa có ca nào đã kết.</section>}
-    <section className="card operation-timeline"><h2>Lịch sử gửi báo cáo</h2>{timeline.map(event => <article key={event.eventId}><FiClock /><div><b>{event.eventType}</b><small>{event.actorName || "Hệ thống"} · {new Date(event.occurredAt).toLocaleString("vi-VN")}</small></div></article>)}</section>
+    <section className="card operation-timeline"><h2>Lịch sử gửi báo cáo</h2>{timeline.length?timeline.map(event => <article key={event.eventId}><FiClock /><div><b>{event.eventType==="SHIFT_REPORT_SUBMITTED"?`Đã gửi báo cáo ${event.operationShift==="morning"?"ca sáng":"ca tối"}`:event.eventType}</b><small>{event.actorName || "Hệ thống"} · {vietnamDateTime(event.occurredAt)}</small></div></article>):<p className="operation-timeline-empty">Ngày này chưa có lịch sử gửi báo cáo.</p>}</section>
     <DetailModal report={selected} onClose={() => setSelected(null)} />
   </div>;
 }

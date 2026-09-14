@@ -1,0 +1,60 @@
+.report-date-picker {
+  display: flex;
+  height: 40px;
+  overflow: hidden;
+  border: 1px solid #b9c7d3;
+  border-radius: 7px;
+  background: #fff;
+}
+
+.shift-report-controls .report-date-picker input {
+  min-width: 150px;
+  height: 38px;
+  border: 0;
+  border-radius: 0;
+  cursor: pointer;
+}
+
+.report-date-picker input::-webkit-calendar-picker-indicator {
+  display: none;
+}
+
+.report-date-picker > button {
+  width: 40px;
+  border: 0;
+  border-left: 1px solid #d4dee6;
+  background: #edf7fd;
+  color: #087fbd;
+  display: grid;
+  place-items: center;
+  font-size: 18px;
+}
+
+.report-date-picker > button:hover {
+  background: #dceffa;
+}
+
+.report-current-date {
+  height: 40px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 7px;
+  background: #209be8;
+  color: #fff;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.report-current-date:hover {
+  background: #1288cf;
+}
+
+@media (max-width: 650px) {
+  .report-current-date {
+    width: 100%;
+    justify-content: center;
+  }
+}

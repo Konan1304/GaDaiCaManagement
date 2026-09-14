@@ -1,6 +1,7 @@
 import {Fragment,useEffect,useMemo,useState} from "react";
 import {FiAlertTriangle,FiCheckCircle,FiChevronLeft,FiClock,FiEdit2,FiEye,FiSearch,FiUsers,FiX} from "react-icons/fi";
 import {Link} from "react-router-dom";
+import VietnamDateInput from "../../components/VietnamDateInput";
 import {managerAttendanceApi,managerOperationApi} from "../../api/services";
 
 const pad=value=>String(value).padStart(2,"0");
@@ -86,7 +87,7 @@ export default function ManagerAttendancePage(){
     {success&&<div className="manager-form-success">{success}</div>}{error&&<div className="manager-form-error">{error}</div>}
     <div className="attendance-filters attendance-filters-compact">
       <label>Tháng chấm công<input type="month" value={month} onChange={e=>chooseMonth(e.target.value)}/></label>
-      <label>Ngày chấm công<input type="date" value={selectedDate} onChange={e=>chooseDate(e.target.value)}/></label>
+      <label>Ngày chấm công<VietnamDateInput value={selectedDate} onChange={e=>chooseDate(e.target.value)}/></label>
       <label>Chi nhánh<div className="attendance-branch-readonly">{options.branches.find(branch=>String(branch.branchId)===branchView)?.branchName||"Chi nhánh"}</div></label>
       <button type="button" className="btn btn-yellow attendance-today-button" onClick={today}>Hôm nay</button>
     </div>

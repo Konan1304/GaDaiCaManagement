@@ -1,7 +1,8 @@
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
-const sql = require("mssql/msnodesqlv8");
+const useSqlLogin=Boolean(String(process.env.DB_USER||'').trim());
+const sql = useSqlLogin ? require("mssql") : require("mssql/msnodesqlv8");
 
 const migrationOrder = [
   "20260725_shift_registration.sql",
@@ -30,12 +31,15 @@ const migrationOrder = [
   "20260903_employee_employment_type.sql",
   "20260905_branch_operational_reports.sql",
   "20260905_chat_custom_channels.sql",
+  "20260908_platform_security.sql",
+  "20260910_chat_reports_completion.sql",
 ];
 const sandboxMigrationOrder = ["20260806_shift_inventory_sandbox.sql"];
 
 function splitBatches(source) { return source.split(/^\s*GO\s*$/gim).map((value) => value.trim()).filter(Boolean); }
 function connectionConfig(database) {
   const yesNo = (value, fallback) => String(value ?? fallback).toLowerCase() === "true" ? "yes" : "no";
+  if(useSqlLogin)return {server:process.env.DB_SERVER,database,user:process.env.DB_USER,password:process.env.DB_PASSWORD,port:Number(process.env.DB_PORT||1433),options:{encrypt:yesNo(process.env.DB_ENCRYPT,false)==='yes',trustServerCertificate:yesNo(process.env.DB_TRUST_SERVER_CERTIFICATE,true)==='yes'},requestTimeout:60000};
   return { connectionString: ["Driver={ODBC Driver 17 for SQL Server}", `Server={${process.env.DB_SERVER}}`, `Database={${database}}`, "Trusted_Connection={yes}", `Encrypt={${yesNo(process.env.DB_ENCRYPT, false)}}`, `TrustServerCertificate={${yesNo(process.env.DB_TRUST_SERVER_CERTIFICATE, true)}}`].join(";"), requestTimeout: 60000 };
 }
 async function connect(database = process.env.DB_DATABASE) { return new sql.ConnectionPool(connectionConfig(database)).connect(); }

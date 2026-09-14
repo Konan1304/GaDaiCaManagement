@@ -1,6 +1,7 @@
 import {useEffect,useMemo,useState} from "react";
 import {FiArrowDownCircle,FiArrowUpCircle,FiEye,FiX} from "react-icons/fi";
 import {importApi,inventoryOverviewApi,productApi} from "../../api/services";
+import VietnamDateInput from "../../components/VietnamDateInput";
 import ImportInventoryPage from "./ImportInventoryPage";
 
 const incoming=new Set(["import","adjustment_in","transfer_in"]);
@@ -35,8 +36,8 @@ export default function InventoryTransactionsPage({branches=[],defaultBranchId="
     {message&&<div className="manager-form-success">{message}</div>}{error&&<div className="manager-form-error">{error}</div>}
     <form className="card transaction-filters" onSubmit={e=>{e.preventDefault();const next={...filters,page:1};setFilters(next);load(next)}}>
       <label>Chi nhánh<select value={filters.branchId} onChange={e=>setFilters(v=>({...v,branchId:e.target.value,page:1}))}>{branches.map(b=><option key={b.id} value={b.id}>{b.branchName}</option>)}</select></label>
-      <label>Từ ngày<input type="date" value={filters.dateFrom} onChange={e=>setFilters(v=>({...v,dateFrom:e.target.value,page:1}))}/></label>
-      <label>Đến ngày<input type="date" value={filters.dateTo} onChange={e=>setFilters(v=>({...v,dateTo:e.target.value,page:1}))}/></label>
+      <label>Từ ngày<VietnamDateInput value={filters.dateFrom} onChange={e=>setFilters(v=>({...v,dateFrom:e.target.value,page:1}))}/></label>
+      <label>Đến ngày<VietnamDateInput value={filters.dateTo} onChange={e=>setFilters(v=>({...v,dateTo:e.target.value,page:1}))}/></label>
       <label>Tìm sản phẩm<input value={filters.search} placeholder="Mã hoặc tên sản phẩm" onChange={e=>setFilters(v=>({...v,search:e.target.value}))}/></label>
       <button className="btn btn-primary">Lọc</button>
     </form>
